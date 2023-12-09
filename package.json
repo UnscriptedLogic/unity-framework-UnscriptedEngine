@@ -1,0 +1,24 @@
+{
+    "name": "com.unscriptedlogic.unscriptedengine",
+    "version": "0.0.1",
+    "displayName": "UnscriptedEngine",
+    "description": "A Unity framework heavily inspired by Unreal Engine's workflow",
+    "unity": "2023.2",
+    "unityRelease": "0b17",
+    "documentationUrl": "",
+    "changelogUrl": "",
+    "licensesUrl": "",
+    "dependencies": {
+      "com.unity.inputsystem": "1.7.0"
+   },
+   "keywords": [
+      "UnscriptedLogic",
+      "UnscriptedEngine",
+      "Unreal Engine Framework"
+    ],
+    "author": {
+      "name": "Nathaniel 'UnscriptedLogic' Alcala",
+      "email": "nhalcala@Gmail.com",
+      "url": "https://tinyurl.com/nat-dev"
+    }
+  }

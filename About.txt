@@ -1,0 +1,13 @@
+If you are reading this, you're probably currently digging through the source code of my game, and if you aren't hello anyways.
+
+Throughtout my journey as a game developer, I've found a few functions and workflows that are repeated over and over again. So I created UnscriptedLogicLib.dll, my personal library of utility functions. It's kinda like a repairman's toolbox. A whole script of functions that help me do what I wanna do but without having to remember how to do it.
+
+Over time, I found that it wasn't really enough. It's just bits and pieces of code. Sure it helped me in a few game jams but it never really helped me in making bigger games. So I took it up a notch.
+
+That's when I created this framework/engine. It's heavily, and I mean, heavily inspired by Unreal Engine's workflow. It's not really a 1 : 1 but it's close enough. Why Unreal Engine? While I have tried Godot, Unreal Engine's framework seems to be quite intuitive. It took a while for me to understand but overall the framework aids in helping you do things the right way. It's also semi multiplayer proof, meaning some of the decisions in that engine was created with multiplayer in mind and since this engine follows that concept, I THINK this framework also caters to multiplayer well. I just haven't tested it yet.
+
+If you're looking for documentation and I still haven't made one in the future then I am really sorry. I never intended this engine to reach anyone else's computer. This project was created by me and only when I was in too deep did I realize that I would have to be sending this project off to the school.
+
+If I did create documentation and you are indeed here out of curiosity then we're probably in a timeline where I am the most hardworking. Unbelievable.
+
+Anyways, have fun looking through the code of this engine. It's quite possibly my best framework to date and it helped me speedrun a lot of utility and foundations of this game. Also if you'd like to use this engine yourself, do contact me at nhalcala@Gmail.com because by the time you are reading this, I've probably made better adjustments to the engine and this would have been outdated.
