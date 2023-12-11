@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 namespace UnscriptedEngine
 {
     [DefaultExecutionOrder(-1)]
-    public abstract class UGameModeBase : MonoBehaviour
+    public abstract class UGameModeBase : UObject
     {
         public class LoadProcess
         {
@@ -41,9 +41,11 @@ namespace UnscriptedEngine
         [SerializeField] protected InputActionAsset inputContext;
         [SerializeField] protected UController playerController;
         [SerializeField] protected ULevelPawn playerPawn;
+        [SerializeField] protected UGameInstance gameInstance;
 
         protected UController _playerController;
         protected ULevelPawn _playerPawn;
+        protected UGameInstance _gameInstance;
 
         protected List<LoadProcess> loadProcesses;
 
@@ -61,10 +63,18 @@ namespace UnscriptedEngine
         public static UGameModeBase instance { get; private set; }
 
         public InputActionAsset InputContext => inputContext;
+        public UGameInstance GameInstance => gameInstance;
 
         protected void Awake()
         {
             instance = this;
+
+            if (UGameInstance.singleton == null)
+            {
+                Instantiate(gameInstance);
+            }
+
+            _gameInstance = gameInstance;
 
             inputContext.Enable();
 
