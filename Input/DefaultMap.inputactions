@@ -15,6 +15,15 @@
                     "initialStateCheck": true
                 },
                 {
+                    "name": "MouseRightClick",
+                    "type": "Button",
+                    "id": "a82254d3-e833-44fd-9436-c83b2cc3b558",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "MouseClick",
                     "type": "Button",
                     "id": "28319c55-a535-483d-9612-9f50ef6e2504",
@@ -33,34 +42,7 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "MouseRightClick",
-                    "type": "Button",
-                    "id": "a82254d3-e833-44fd-9436-c83b2cc3b558",
-                    "expectedControlType": "Button",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "RotatePressed",
-                    "type": "Value",
-                    "id": "1521f40a-eff7-4711-a3b6-fb6f0fb5662d",
-                    "expectedControlType": "Axis",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": true
-                },
-                {
-                    "name": "ConveyorShortcut",
-                    "type": "Button",
-                    "id": "0d123dc1-015b-49f9-9bb4-ca05c78c22f4",
-                    "expectedControlType": "Button",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "Zoom",
+                    "name": "MouseScroll",
                     "type": "Value",
                     "id": "0fccd280-c464-4629-8c77-fac09f952695",
                     "expectedControlType": "Axis",
@@ -105,56 +87,12 @@
                 },
                 {
                     "name": "",
-                    "id": "23785419-cb00-4d29-a5d6-4f82a82dced7",
-                    "path": "<Mouse>/rightButton",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "MouseRightClick",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "d4acffce-0ea4-471c-a9a9-0224bb361bde",
-                    "path": "<Keyboard>/q",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "RotatePressed",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "6d5c888d-01a9-4967-a266-e2a1a55f0fb5",
-                    "path": "<Keyboard>/e",
-                    "interactions": "",
-                    "processors": "Invert",
-                    "groups": "",
-                    "action": "RotatePressed",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "fb4fa8d6-3861-4b73-9c8f-e1b0e9667346",
-                    "path": "<Keyboard>/c",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "ConveyorShortcut",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
                     "id": "7e40c36c-2774-4033-9d4c-e841e83312b8",
                     "path": "<Mouse>/scroll/up",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Zoom",
+                    "action": "MouseScroll",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
@@ -165,7 +103,18 @@
                     "interactions": "",
                     "processors": "Invert",
                     "groups": "",
-                    "action": "Zoom",
+                    "action": "MouseScroll",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "23785419-cb00-4d29-a5d6-4f82a82dced7",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "MouseRightClick",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }
