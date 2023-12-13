@@ -20,7 +20,7 @@ namespace UnscriptedEngine
             tmp.font = theme.PrimaryFont;
         }
 
-        public override void OnBindedValueChanged(object value)
+        public override void OnBindedValueChanged<T>(T value)
         {
             tmp.text = value.ToString();
         }

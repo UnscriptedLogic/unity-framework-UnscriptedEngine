@@ -64,10 +64,8 @@ namespace UnscriptedEngine
         {
             UUIComponent component = GetUIComponent<UUIComponent>(id);
 
-            variable.OnValueChanged += (value) =>
-            {
-                component.OnBindedValueChanged(value);
-            };
+            variable.OnValueChanged += component.OnBindedValueChanged;
+            component.OnBindedValueChanged(variable.Value);
         }
 
         /// <summary>
@@ -81,6 +79,16 @@ namespace UnscriptedEngine
             {
                 component.OnBindedValueChanged(defineBindingMethod(value));
             };
+        }
+
+        /// <summary>
+        /// Binds a UIComponent to a Bindable variable, subscribing to it's events and updating when something changes.
+        /// </summary>
+        public void UnBindUI<T>(ref Bindable<T> variable, string id)
+        {
+            UUIComponent component = GetUIComponent<UUIComponent>(id);
+
+            variable.OnValueChanged -= component.OnBindedValueChanged;
         }
 
         /// <summary>

@@ -40,7 +40,7 @@ namespace UnscriptedEngine
             }
         }
 
-        public virtual void OnBindedValueChanged(object value) 
+        public virtual void OnBindedValueChanged<T>(T value) 
         {
             Debug.Log(value);
         }
