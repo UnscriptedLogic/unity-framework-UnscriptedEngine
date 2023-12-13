@@ -50,8 +50,6 @@ namespace UnscriptedEngine
 
         protected List<LoadProcess> loadProcesses;
 
-        private bool isUsingDefaultInputMap = false;
-
         public event EventHandler OnPause;
         public event EventHandler OnResume;
 
@@ -100,18 +98,6 @@ namespace UnscriptedEngine
 
         protected virtual void OnDisable()
         {
-            if (isUsingDefaultInputMap)
-            {
-                GetDefaultInputMap().FindAction("MouseClick").performed -= DefaultMap_OnMouseDown;
-                GetDefaultInputMap().FindAction("MouseRightClick").performed -= DefaultMap_OnMouseRightDown;
-
-                GetDefaultInputMap().FindAction("MouseClick").canceled -= DefaultMap_OnLeftMouseUp;
-                GetDefaultInputMap().FindAction("MouseRightClick").canceled -= DefaultMap_OnMouseRightUp;
-
-                GetDefaultInputMap().FindAction("Escape").performed -= DefaultMap_OnEscapeDown;
-                GetDefaultInputMap().FindAction("Escape").canceled -= DefaultMap_OnEscapeUp;
-            }
-
             OnLevelFinished?.Invoke(this, EventArgs.Empty);
         }
 
@@ -151,53 +137,8 @@ namespace UnscriptedEngine
             }
         }
 
-        #region Default Input Mapping
-
-        public InputActionMap GetDefaultInputMap()
-        {
-            InputActionMap map = inputContext.FindActionMap("Default");
-
-            if (!isUsingDefaultInputMap)
-            {
-                isUsingDefaultInputMap = true;
-
-                map.FindAction("MouseClick").performed += DefaultMap_OnMouseDown;
-                map.FindAction("MouseRightClick").performed += DefaultMap_OnMouseRightDown;
-
-                map.FindAction("MouseClick").canceled += DefaultMap_OnLeftMouseUp;
-                map.FindAction("MouseRightClick").canceled += DefaultMap_OnMouseRightUp;
-
-                map.FindAction("Escape").performed += DefaultMap_OnEscapeDown;
-                map.FindAction("Escape").canceled += DefaultMap_OnEscapeUp;
-            }
-
-            return map;
-        }
-
-        private void DefaultMap_OnMouseDown(InputAction.CallbackContext obj) => OnDefaultLeftMouseDown();
-        private void DefaultMap_OnMouseRightDown(InputAction.CallbackContext obj) => OnDefaultRightMouseDown();
-
-        private void DefaultMap_OnLeftMouseUp(InputAction.CallbackContext obj) => OnDefaultLeftMouseUp();
-        private void DefaultMap_OnMouseRightUp(InputAction.CallbackContext context) => OnDefaultRightMouseUp();
-
-        private void DefaultMap_OnEscapeUp(InputAction.CallbackContext context) => OnDefaultEscapeUp();
-        private void DefaultMap_OnEscapeDown(InputAction.CallbackContext obj) => OnDefaultEscapeDown();
-
-        public Vector2 GetDefaultMousePosition() => GetDefaultInputMap().FindAction("MousePosition").ReadValue<Vector2>();
-
         public virtual ULevelPawn GetPlayerPawn() => _playerPawn;
         public virtual UController GetPlayerController() => _playerController;
-
-        public virtual void OnDefaultLeftMouseDown() { }
-        public virtual void OnDefaultRightMouseDown() { }
-
-        public virtual void OnDefaultLeftMouseUp() { }
-        public virtual void OnDefaultRightMouseUp() { }
-
-        public virtual void OnDefaultEscapeUp() { }
-        public virtual void OnDefaultEscapeDown() { } 
-
-        #endregion
 
         public virtual void LoadScene(int buildIndex)
         {
