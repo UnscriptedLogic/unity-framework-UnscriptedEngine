@@ -1,4 +1,3 @@
-using Codice.Client.BaseCommands;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -102,14 +101,14 @@ namespace UnscriptedEngine
         {
             inputContext.Disable();
 
-            if (playerController != null)
+            if (_playerController != null)
             {
-                Destroy(playerController);
+                Destroy(_playerController);
             }
 
-            if (playerPawn != null)
+            if (_playerPawn != null)
             {
-                Destroy(playerPawn);
+                Destroy(_playerPawn);
             }
 
             OnLevelFinished?.Invoke(this, EventArgs.Empty);
