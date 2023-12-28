@@ -98,6 +98,11 @@ namespace UnscriptedEngine
 
         protected virtual void OnDisable()
         {
+            inputContext.Disable();
+
+            Destroy(playerController);
+            Destroy(playerPawn);
+
             OnLevelFinished?.Invoke(this, EventArgs.Empty);
         }
 
@@ -109,11 +114,6 @@ namespace UnscriptedEngine
         internal virtual void ResumeGame()
         {
             OnResume?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void OnDestroy()
-        {
-            inputContext.Disable();
         }
 
         public void AddLoadingProcess(LoadProcess loadProcess)
@@ -142,6 +142,8 @@ namespace UnscriptedEngine
 
         public virtual void LoadScene(int buildIndex)
         {
+
+
             SceneManager.LoadScene(buildIndex);
         }
 
