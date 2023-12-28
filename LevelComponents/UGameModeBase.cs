@@ -95,13 +95,22 @@ namespace UnscriptedEngine
         }
 
         protected virtual void Update() { }
+            
+        protected virtual void OnDisable() => CleanUpGameMode();
 
-        protected virtual void OnDisable()
+        private void CleanUpGameMode()
         {
             inputContext.Disable();
 
-            Destroy(playerController);
-            Destroy(playerPawn);
+            if (playerController != null)
+            {
+                Destroy(playerController);
+            }
+
+            if (playerPawn != null)
+            {
+                Destroy(playerPawn);
+            }
 
             OnLevelFinished?.Invoke(this, EventArgs.Empty);
         }
@@ -142,7 +151,7 @@ namespace UnscriptedEngine
 
         public virtual void LoadScene(int buildIndex)
         {
-
+            CleanUpGameMode();
 
             SceneManager.LoadScene(buildIndex);
         }
