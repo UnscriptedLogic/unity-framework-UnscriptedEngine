@@ -111,27 +111,5 @@ namespace UnscriptedEngine
 
             return new Vector3(snappedX, snappedY, snappedZ);
         }
-
-        public T CastTo<T>() where T : ULevelObject
-        {
-            if (this as T)
-            {
-                return (T)this;
-            }
-
-            return default(T);
-        }
-
-        public void CastTo<T>(Action<T> OnSuccess, Action OnFailure = null) where T : ULevelObject
-        {
-            if (this as T)
-            {
-                OnSuccess(this as T);
-            }
-            else
-            {
-                OnFailure?.Invoke();
-            }
-        }
     } 
 }
