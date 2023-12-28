@@ -142,7 +142,7 @@ namespace UnscriptedEngine
 
         public virtual void LoadScene(int buildIndex)
         {
-            SceneManager.LoadSceneAsync(buildIndex);
+            SceneManager.LoadScene(buildIndex);
         }
 
         public virtual void QuitGame()
