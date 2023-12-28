@@ -9,6 +9,7 @@ public class TextComponentCreationWindow : EditorWindow
 {
     public const string PATHNAME = "GameObject/UnscriptedEngine/";
     private string componentName = "TextComponent";
+    private string text = "";
 
     [MenuItem(PATHNAME + "UI/Create Text Component")]
     public static void ShowWindow()
@@ -20,8 +21,8 @@ public class TextComponentCreationWindow : EditorWindow
     {
         GUILayout.Space(10);
 
-        GUILayout.Label("Enter Text Component Name:", EditorStyles.boldLabel);
-        componentName = EditorGUILayout.TextField("Name", componentName);
+        GUILayout.Label("Enter Text:", EditorStyles.boldLabel);
+        text = EditorGUILayout.TextArea(text, GUILayout.Height(100));
 
         GUILayout.Space(10);
 
@@ -34,14 +35,32 @@ public class TextComponentCreationWindow : EditorWindow
 
     private void CreateTextComponent()
     {
-        GameObject textComponent = new GameObject(componentName);
+        if (!string.IsNullOrEmpty(text))
+        {
+            if (text.Length >= 16)
+            {
+                componentName = "Desc";
+            }
+            else
+            {
+                componentName = "";
+                for (int i = 0; i < Mathf.Min(text.Length, 16); i++)
+                {
+                    if (char.IsWhiteSpace(text[i])) continue;
+
+                    componentName += text[i];
+                }
+            }
+        }
+
+        GameObject textComponent = new GameObject(componentName + "TMP");
         GameObjectUtility.SetParentAndAlign(textComponent, Selection.activeGameObject as GameObject);
 
         textComponent.AddComponent<RectTransform>();
         textComponent.AddComponent<CanvasRenderer>();
 
         TextMeshProUGUI tmp = textComponent.AddComponent<TextMeshProUGUI>();
-        tmp.text = componentName;
+        tmp.text = text;
 
         textComponent.AddComponent<UTextComponent>();
 
