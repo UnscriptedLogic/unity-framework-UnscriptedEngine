@@ -38,9 +38,12 @@ namespace UnscriptedEngine
 
         protected override void OnLevelStopped()
         {
-            base.OnLevelStopped();
+            OnPawnCreated -= Controller_OnPawnCreated;
+            OnPawnToBeDestroyed -= Controller_OnPawnDestroyed;
 
             UnPossessPawn();
+
+            base.OnLevelStopped();
         }
 
         protected void PauseGame() => GameMode.PauseGame();
