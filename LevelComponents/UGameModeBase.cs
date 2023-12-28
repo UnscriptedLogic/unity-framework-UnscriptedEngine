@@ -114,13 +114,17 @@ namespace UnscriptedEngine
             OnLevelFinished?.Invoke(this, EventArgs.Empty);
         }
 
-        internal virtual void PauseGame()
+        public virtual void PauseGame()
         {
+            Time.timeScale = Mathf.Epsilon;
+
             OnPause?.Invoke(this, EventArgs.Empty);
         }
 
-        internal virtual void ResumeGame()
+        public virtual void ResumeGame()
         {
+            Time.timeScale = 1f;
+
             OnResume?.Invoke(this, EventArgs.Empty);
         }
 
