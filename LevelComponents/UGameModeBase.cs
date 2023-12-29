@@ -69,7 +69,8 @@ namespace UnscriptedEngine
         {
             instance = this;
 
-            if (UGameInstance.singleton == null)
+            _gameInstance = UGameInstance.singleton;
+            if (_gameInstance == null)
             {
                 _gameInstance = Instantiate(gameInstance);
             }
