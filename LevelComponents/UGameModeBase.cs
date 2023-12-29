@@ -63,7 +63,7 @@ namespace UnscriptedEngine
         public static UGameModeBase instance { get; private set; }
 
         public InputActionAsset InputContext => inputContext;
-        public UGameInstance GameInstance => gameInstance;
+        public UGameInstance GameInstance => _gameInstance;
 
         protected void Awake()
         {
