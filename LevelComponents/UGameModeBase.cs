@@ -71,10 +71,8 @@ namespace UnscriptedEngine
 
             if (UGameInstance.singleton == null)
             {
-                Instantiate(gameInstance);
+                _gameInstance = Instantiate(gameInstance);
             }
-
-            _gameInstance = gameInstance;
 
             inputContext.Enable();
 
