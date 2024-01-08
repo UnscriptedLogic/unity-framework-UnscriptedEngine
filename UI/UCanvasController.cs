@@ -126,6 +126,15 @@ namespace UnscriptedEngine
         }
 
         /// <summary>
+        /// A shorthand to binding a method to any UIComponent that can be subscribed to when interacted with.
+        /// Takes in a bindable component
+        /// </summary>
+        public void Bind(IBindable bindableComponent, UnityAction method)
+        {
+            bindableComponent.Bind(method);
+        }
+
+        /// <summary>
         /// A shorthand to unbinding a method from any UIComponent that can be subscribed to when interacted with.
         /// </summary>
         public void UnBind<T>(string id, UnityAction method) where T : UUIComponent, IBindable
