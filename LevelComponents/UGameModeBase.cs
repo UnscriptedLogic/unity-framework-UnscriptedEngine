@@ -96,18 +96,18 @@ namespace UnscriptedEngine
             
         protected virtual void OnDisable() => CleanUpGameMode();
 
-        private void CleanUpGameMode()
+        protected virtual void CleanUpGameMode()
         {
             inputContext.Disable();
 
             if (_playerController != null)
             {
-                Destroy(_playerController);
+                Destroy(_playerController.gameObject);
             }
 
             if (_playerPawn != null)
             {
-                Destroy(_playerPawn);
+                Destroy(_playerPawn.gameObject);
             }
 
             OnLevelFinished?.Invoke(this, EventArgs.Empty);

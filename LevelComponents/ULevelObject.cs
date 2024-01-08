@@ -100,7 +100,7 @@ namespace UnscriptedEngine
             T uCanvasController = widget.GetComponent<T>();
             uCanvasController.OnWidgetDetached(this);
 
-            Destroy(widget);
+            Destroy(widget.gameObject);
         }
 
         protected virtual void OnDestroy()

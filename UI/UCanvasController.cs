@@ -79,6 +79,8 @@ namespace UnscriptedEngine
             {
                 component.OnBindedValueChanged(defineBindingMethod(value));
             };
+
+            component.OnBindedValueChanged(variable.Value);
         }
 
         /// <summary>
