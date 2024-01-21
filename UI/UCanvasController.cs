@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine.Events;
 using System.Linq;
 using System;
+using Unity.VisualScripting.YamlDotNet.Core.Tokens;
 
 namespace UnscriptedEngine
 {
@@ -80,7 +81,7 @@ namespace UnscriptedEngine
                 component.OnBindedValueChanged(defineBindingMethod(value));
             };
 
-            component.OnBindedValueChanged(variable.Value);
+            component.OnBindedValueChanged(defineBindingMethod(variable.Value));
         }
 
         /// <summary>
