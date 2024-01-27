@@ -1,6 +1,6 @@
 If you are reading this, you're probably currently digging through the source code of my game, and if you aren't hello anyways.
 
-Throughtout my journey as a game developer, I've found a few functions and workflows that are repeated over and over again. So I created UnscriptedLogicLib.dll, my personal library of utility functions. It's kinda like a repairman's toolbox. A whole script of functions that help me do what I wanna do but without having to remember how to do it.
+Throughout my journey as a game developer, I've found a few functions and workflows that are repeated over and over again. So I created UnscriptedLogicLib.dll, my personal library of utility functions. It's kinda like a repairman's toolbox. A whole script of functions that help me do what I wanna do but without having to remember how to do it.
 
 Over time, I found that it wasn't really enough. It's just bits and pieces of code. Sure it helped me in a few game jams but it never really helped me in making bigger games. So I took it up a notch.
 
