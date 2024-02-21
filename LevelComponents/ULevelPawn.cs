@@ -31,6 +31,21 @@ namespace UnscriptedEngine
         protected virtual void EnableInput(InputActionAsset inputContext) { }
         protected virtual void DisableInput(InputActionAsset inputContext) { }
 
+        protected bool RaycastAtMousePosition(Camera camera, out RaycastHit hitinfo, float distance = 100f)
+        {
+            return Raycast.FromMousePos3D(GetDefaultMousePosition(), camera, out hitinfo, distance);
+        }
+
+        protected bool RaycastAtCenter(Camera camera, out RaycastHit hitinfo, float distance = 100f)
+        {
+            return Raycast.FromCenterCamera(camera, out hitinfo, distance);
+        }
+
+        protected bool RaycastAtCenter(Camera camera, LayerMask ignoreLayer, out RaycastHit hitinfo, float distance = 100f)
+        {
+            return Raycast.FromCenterCamera(camera, ignoreLayer, out hitinfo, distance);
+        }
+
         #region Default Input Mapping
 
         public InputActionMap GetDefaultInputMap()

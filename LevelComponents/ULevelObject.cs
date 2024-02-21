@@ -117,5 +117,5 @@ namespace UnscriptedEngine
 
             return new Vector3(snappedX, snappedY, snappedZ);
         }
-    } 
+    }  
 }
