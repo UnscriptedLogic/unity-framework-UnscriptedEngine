@@ -1,4 +1,4 @@
-using Codice.CM.Common;
+using Codice.Client.BaseCommands;
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,25 +12,34 @@ namespace UnscriptedEngine
         public static event EventHandler OnPawnCreated;
         public static event EventHandler OnPawnToBeDestroyed;
 
-        protected override void OnLevelStarted()
-        {
-            base.OnLevelStarted();
-
-            EnableInput(GameMode.InputContext);
-        }
-
-        protected override void OnLevelStopped()
-        {
-            base.OnLevelStopped();
-
-            DisableInput(GameMode.InputContext);
-        }
-
         internal override void FireObjectCreationEvent() => OnPawnCreated?.Invoke(this, EventArgs.Empty);
         internal override void FireObjectDestroyedEvent() => OnPawnToBeDestroyed?.Invoke(this, EventArgs.Empty);
 
-        protected virtual void EnableInput(InputActionAsset inputContext) { }
-        protected virtual void DisableInput(InputActionAsset inputContext) { }
+        protected virtual void EnableInput(InputActionAsset inputContext) 
+        {
+            inputContext.FindAction("MouseClick").performed += DefaultMap_OnMouseDown;
+            inputContext.FindAction("MouseRightClick").performed += DefaultMap_OnMouseRightDown;
+
+            inputContext.FindAction("MouseClick").canceled += DefaultMap_OnLeftMouseUp;
+            inputContext.FindAction("MouseRightClick").canceled += DefaultMap_OnMouseRightUp;
+
+            inputContext.FindAction("Escape").performed += DefaultMap_OnEscapeDown;
+            inputContext.FindAction("Escape").canceled += DefaultMap_OnEscapeUp;
+        }
+        
+        protected virtual void DisableInput(InputActionAsset inputContext)
+        {
+            inputContext.FindAction("MouseClick").performed -= DefaultMap_OnMouseDown;
+            inputContext.FindAction("MouseRightClick").performed -= DefaultMap_OnMouseRightDown;
+
+            inputContext.FindAction("MouseClick").canceled -= DefaultMap_OnLeftMouseUp;
+            inputContext.FindAction("MouseRightClick").canceled -= DefaultMap_OnMouseRightUp;
+
+            inputContext.FindAction("Escape").performed -= DefaultMap_OnEscapeDown;
+            inputContext.FindAction("Escape").canceled -= DefaultMap_OnEscapeUp;
+        }
+
+        #region Raycast Utility
 
         protected bool RaycastAtMousePosition(Camera camera, out RaycastHit hitinfo, float distance = 100f)
         {
@@ -45,7 +54,8 @@ namespace UnscriptedEngine
         protected bool RaycastAtCenter(Camera camera, LayerMask ignoreLayer, out RaycastHit hitinfo, float distance = 100f)
         {
             return Raycast.FromCenterCamera(camera, ignoreLayer, out hitinfo, distance);
-        }
+        } 
+        #endregion
 
         #region Default Input Mapping
 
@@ -56,15 +66,6 @@ namespace UnscriptedEngine
             if (!isUsingDefaultInputMap)
             {
                 isUsingDefaultInputMap = true;
-
-                map.FindAction("MouseClick").performed += DefaultMap_OnMouseDown;
-                map.FindAction("MouseRightClick").performed += DefaultMap_OnMouseRightDown;
-
-                map.FindAction("MouseClick").canceled += DefaultMap_OnLeftMouseUp;
-                map.FindAction("MouseRightClick").canceled += DefaultMap_OnMouseRightUp;
-
-                map.FindAction("Escape").performed += DefaultMap_OnEscapeDown;
-                map.FindAction("Escape").canceled += DefaultMap_OnEscapeUp;
             }
 
             return map;
@@ -92,21 +93,21 @@ namespace UnscriptedEngine
 
         #endregion
 
-        public virtual void OnPossess(UController uController) { }
-        public virtual void OnUnPossess(UController uController) { }
+        public virtual void OnPossess(UController uController) 
+        {
+            EnableInput(GameMode.InputContext);
+        }
+            
+        public virtual void OnUnPossess(UController uController)
+        {
+            DisableInput(GameMode.InputContext);
+        }
 
         protected override void OnDestroy()
         {
             if (isUsingDefaultInputMap)
             {
-                GetDefaultInputMap().FindAction("MouseClick").performed -= DefaultMap_OnMouseDown;
-                GetDefaultInputMap().FindAction("MouseRightClick").performed -= DefaultMap_OnMouseRightDown;
-
-                GetDefaultInputMap().FindAction("MouseClick").canceled -= DefaultMap_OnLeftMouseUp;
-                GetDefaultInputMap().FindAction("MouseRightClick").canceled -= DefaultMap_OnMouseRightUp;
-
-                GetDefaultInputMap().FindAction("Escape").performed -= DefaultMap_OnEscapeDown;
-                GetDefaultInputMap().FindAction("Escape").canceled -= DefaultMap_OnEscapeUp;
+                DisableInput(GameMode.InputContext);
             }
 
             base.OnDestroy();
