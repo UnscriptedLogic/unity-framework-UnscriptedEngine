@@ -29,7 +29,6 @@ namespace UnscriptedEngine
                 possessedPawn = null;
 
                 UnPossessPawn();
-                possessedPawn.OnUnPossess(this);
             }
         }
 
@@ -39,7 +38,6 @@ namespace UnscriptedEngine
             OnPawnToBeDestroyed -= Controller_OnPawnDestroyed;
 
             UnPossessPawn();
-            possessedPawn.OnUnPossess(this);
 
             base.OnLevelStopped();
         }
