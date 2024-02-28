@@ -61,8 +61,11 @@ namespace UnscriptedEngine
 
 
         protected virtual void UnPossessPawn() 
-        { 
-            possessedPawn.OnUnPossess(this);
+        {
+            if (possessedPawn != null)
+            {
+                possessedPawn.OnUnPossess(this);
+            }
         }
     }
 
