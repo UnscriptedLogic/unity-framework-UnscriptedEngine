@@ -27,7 +27,9 @@ namespace UnscriptedEngine
             if (levelPawn == possessedPawn)
             {
                 possessedPawn = null;
+
                 UnPossessPawn();
+                possessedPawn.OnUnPossess(this);
             }
         }
 
@@ -37,6 +39,7 @@ namespace UnscriptedEngine
             OnPawnToBeDestroyed -= Controller_OnPawnDestroyed;
 
             UnPossessPawn();
+            possessedPawn.OnUnPossess(this);
 
             base.OnLevelStopped();
         }
@@ -44,8 +47,23 @@ namespace UnscriptedEngine
         protected void PauseGame() => GameMode.PauseGame();
         protected void ResumeGame() => GameMode.ResumeGame();
 
-        protected virtual ULevelPawn PossessPawn() => null;
-        protected virtual void UnPossessPawn() { }
+        protected virtual ULevelPawn PossessPawn()
+        {
+            if (possessedPawn != null)
+            {
+                possessedPawn.OnPossess(this);
+
+                return possessedPawn;
+            }
+
+            return null;
+        }
+
+
+        protected virtual void UnPossessPawn() 
+        { 
+            possessedPawn.OnUnPossess(this);
+        }
     }
 
 }

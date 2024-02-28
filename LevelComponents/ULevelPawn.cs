@@ -1,3 +1,4 @@
+using Codice.CM.Common;
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -90,6 +91,9 @@ namespace UnscriptedEngine
         public virtual void OnDefaultEscapeDown() { }
 
         #endregion
+
+        public virtual void OnPossess(UController uController) { }
+        public virtual void OnUnPossess(UController uController) { }
 
         protected override void OnDestroy()
         {
