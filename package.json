@@ -1,6 +1,6 @@
 {
   "name": "com.unscriptedlogic.unscriptedengine",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "displayName": "UnscriptedEngine",
   "description": "A Unity framework heavily inspired by Unreal Engine's workflow. It's partially intrusive nature aims to help developers leverage on the structured workflow of Unreal Engine and the open endedness of Unity",
   "unity": "2023.2",

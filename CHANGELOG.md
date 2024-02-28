@@ -16,3 +16,7 @@
 
 - added RandomLogic and SimpleBuildHandler from UnscriptedLogicLib.dll
 - added USliderComponent for sliders
+
+#V0.0.5
+
+- added OnPossess and OnUnPossess for pawns
