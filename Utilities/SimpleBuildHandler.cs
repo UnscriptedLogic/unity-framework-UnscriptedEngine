@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor.Build.Reporting;
 using UnityEngine;
 
 namespace UnscriptedEngine.BuildHandlers
@@ -92,24 +93,24 @@ namespace UnscriptedEngine.BuildHandlers
             this.buildableObjects = buildableObjects;
         }
 
-        public bool AdminConditionCheck(TBuildable buildable, Action<BuildResult> OnConditionResult)
+        public bool AdminConditionCheck(TBuildable buildable, out BuildResult buildResult)
         {
             for (int i = 0; i < adminBuildConditions.Count; i++)
             {
                 if (!adminBuildConditions[i].Condition(buildable))
                 {
                     BuildResult failedBuildResult = new BuildResult(false, "Admin Condition " + (i + 1) + ": " + adminBuildConditions[i].Name + " failed.");
-                    OnConditionResult?.Invoke(failedBuildResult);
+                    buildResult = failedBuildResult;
                     return false;
                 }
             }
 
             BuildResult passedBuildResult = new BuildResult(true, "Admin conditions passed.");
-            OnConditionResult?.Invoke(passedBuildResult);
+            buildResult = passedBuildResult;
             return true;
         }
 
-        public bool LocalConditionCheck(TBuildable buildable, Vector3 position, Quaternion rotation, Action<BuildResult> OnConditionResult)
+        public bool LocalConditionCheck(TBuildable buildable, Vector3 position, Quaternion rotation, out BuildResult buildResult)
         {
             buildable.LocalPassBuildConditions(builder, out List<LocalBuildCondition> localBuildConditions);
 
@@ -118,13 +119,13 @@ namespace UnscriptedEngine.BuildHandlers
                 if (!localBuildConditions[i].Condition(position, rotation))
                 {
                     BuildResult failedBuildResult = new BuildResult(false, "Local Condition " + (i + 1) + ": " + localBuildConditions[i].Name + " failed.");
-                    OnConditionResult?.Invoke(failedBuildResult);
+                    buildResult = failedBuildResult;
                     return false;
                 }
             }
 
             BuildResult passedBuildResult = new BuildResult(true, "Local conditions passed!");
-            OnConditionResult?.Invoke(passedBuildResult);
+            buildResult = passedBuildResult;
             return true;
         }
 
@@ -134,19 +135,24 @@ namespace UnscriptedEngine.BuildHandlers
 
             if (doAdminPass)
             {
-                if (!AdminConditionCheck(buildable, BuildResult))
+                if (!AdminConditionCheck(buildable, out BuildResult buildResult))
                 {
+                    BuildResult?.Invoke(buildResult);
                     return;
                 }
             }
 
             if (doLocalPass)
             {
-                if (!LocalConditionCheck(buildable, position, rotation, BuildResult))
+                if (!LocalConditionCheck(buildable, position, rotation, out BuildResult buildResult))
                 {
+                    BuildResult?.Invoke(buildResult);
                     return;
                 }
             }
+
+            BuildResult passedBuildResult = new BuildResult(true, "All Conditions Passed!");
+            BuildResult?.Invoke(passedBuildResult);
 
             builder.WhenCreateBuildable(index, position, rotation, buildableObjects[index]);
         }
