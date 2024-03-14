@@ -148,8 +148,8 @@ namespace UnscriptedEngine
             }
         }
 
-        public virtual ULevelPawn GetPlayerPawn<T>() where T : ULevelPawn => _playerPawn.CastTo<T>();
-        public virtual UController GetPlayerController<T>() where T : UController => _playerController.CastTo<T>();
+        public virtual T GetPlayerPawn<T>() where T : ULevelPawn => _playerPawn.CastTo<T>();
+        public virtual T GetPlayerController<T>() where T : UController => _playerController.CastTo<T>();
 
         public virtual void LoadScene(int buildIndex)
         {
