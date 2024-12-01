@@ -8,7 +8,7 @@ namespace UnscriptedEngine
         {
             base.OnLevelStarted();
 
-            PossessPawn(GameMode.GetPlayerPawn());
+            PossessPawn(GameMode.GetPlayerPawn(), true);
 
             OnPawnToBeDestroyed += Controller_OnPawnDestroyed;
         }
