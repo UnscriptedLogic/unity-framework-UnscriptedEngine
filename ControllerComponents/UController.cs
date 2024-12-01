@@ -8,17 +8,9 @@ namespace UnscriptedEngine
         {
             base.OnLevelStarted();
 
-            possessedPawn = PossessPawn();
+            PossessPawn(GameMode.GetPlayerPawn());
 
-            OnPawnCreated += Controller_OnPawnCreated;
             OnPawnToBeDestroyed += Controller_OnPawnDestroyed;
-        }
-
-        private void Controller_OnPawnCreated(object sender, System.EventArgs e)
-        {
-            if (possessedPawn != null) return;
-
-            possessedPawn = PossessPawn();
         }
 
         private void Controller_OnPawnDestroyed(object sender, System.EventArgs e)
@@ -26,15 +18,12 @@ namespace UnscriptedEngine
             ULevelPawn levelPawn = sender as ULevelPawn;
             if (levelPawn == possessedPawn)
             {
-                possessedPawn = null;
-
                 UnPossessPawn();
             }
         }
 
         protected override void OnLevelStopped()
         {
-            OnPawnCreated -= Controller_OnPawnCreated;
             OnPawnToBeDestroyed -= Controller_OnPawnDestroyed;
 
             UnPossessPawn();
@@ -45,16 +34,17 @@ namespace UnscriptedEngine
         protected void PauseGame() => GameMode.PauseGame();
         protected void ResumeGame() => GameMode.ResumeGame();
 
-        protected virtual ULevelPawn PossessPawn()
+        public virtual void PossessPawn(ULevelPawn pawn, bool overrideCurrentPawn = false)
         {
-            if (possessedPawn != null)
+            if (pawn != null)
             {
-                possessedPawn.OnPossess(this);
+                pawn.OnPossess(this);
 
-                return possessedPawn;
+                if (overrideCurrentPawn)
+                {
+                    possessedPawn = pawn;
+                }
             }
-
-            return null;
         }
 
 
@@ -63,7 +53,20 @@ namespace UnscriptedEngine
             if (possessedPawn != null)
             {
                 possessedPawn.OnUnPossess(this);
+
+                possessedPawn = null;
             }
+        }
+
+        public virtual void ChangePossession(ULevelPawn pawn)
+        {
+            UnPossessPawn();
+            PossessPawn(pawn, true);
+        }
+
+        public T GetPossessedPawn<T>() where T : ULevelPawn
+        {
+            return possessedPawn as T;
         }
     }
 
