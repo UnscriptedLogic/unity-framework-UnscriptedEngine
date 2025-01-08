@@ -5,7 +5,7 @@ using Unity.Netcode;
 
 namespace UnscriptedEngine
 {
-    public class UObject : NetworkBehaviour
+    public class UObject : MonoBehaviour
     {
         public T CastTo<T>() where T : UObject
         {
