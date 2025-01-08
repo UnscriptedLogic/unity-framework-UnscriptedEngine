@@ -20,7 +20,7 @@ namespace UnscriptedEngine
             rtsCamera.AddComponent<Camera>();
             rtsCamera.AddComponent<AudioListener>();
             //rtsCamera.AddComponent<UniversalAdditionalCameraData>();
-            rtsCamera.AddComponent<URTSCamera>();
+            //rtsCamera.AddComponent<URTSCamera>();
 
             GameObjectUtility.SetParentAndAlign(go, command.context as GameObject);
 

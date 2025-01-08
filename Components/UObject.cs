@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
 namespace UnscriptedEngine
 {
-    public class UObject : MonoBehaviour
+    public class UObject : NetworkBehaviour
     {
         public T CastTo<T>() where T : UObject
         {
