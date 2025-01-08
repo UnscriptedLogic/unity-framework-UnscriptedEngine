@@ -84,12 +84,17 @@ namespace UnscriptedEngine
         {
             OnGameModeInitialized?.Invoke(this, EventArgs.Empty);
 
-            _playerController = Instantiate(playerController);
-            _playerPawn = Instantiate(playerPawn);
+            Init();
 
             yield return StartCoroutine(LoadLevel());
 
             OnLevelStarted?.Invoke(this, EventArgs.Empty);
+        }
+
+        protected virtual void Init()
+        {
+            _playerController = Instantiate(playerController);
+            _playerPawn = Instantiate(playerPawn);
         }
 
         protected virtual void Update() { }
@@ -134,7 +139,7 @@ namespace UnscriptedEngine
             loadProcesses.Add(loadProcess);
         }
 
-        private IEnumerator LoadLevel()
+        public virtual IEnumerator LoadLevel()
         {
             for (int i = 0; i < loadProcesses.Count; i++)
             {
