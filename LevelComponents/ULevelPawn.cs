@@ -8,6 +8,10 @@ namespace UnscriptedEngine
     {
         protected bool isUsingDefaultInputMap = false;
 
+        protected UController controller;
+
+        public UController Controller => controller;
+
         public static event EventHandler OnPawnCreated;
         public static event EventHandler OnPawnToBeDestroyed;
 
@@ -95,10 +99,14 @@ namespace UnscriptedEngine
         public virtual void OnPossess(UController uController) 
         {
             EnableInput(GameMode.InputContext);
+
+            controller = uController;
         }
             
         public virtual void OnUnPossess(UController uController)
         {
+            controller = null;
+
             DisableInput(GameMode.InputContext);
         }
 
