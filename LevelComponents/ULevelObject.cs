@@ -101,12 +101,14 @@ namespace UnscriptedEngine
             Destroy(widget.gameObject);
         }
 
-        protected virtual void OnDestroy()
+        public override void OnDestroy()
         {
             GameMode.OnLevelStarted -= LevelStarted;
             GameMode.OnLevelFinished -= LevelStopped;
 
             FireObjectDestroyedEvent();
+
+            base.OnDestroy();
         }
 
         public Vector3 SnapToGrid(Vector3 position, float cellSize, Vector3 gridOrigin)

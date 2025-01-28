@@ -163,7 +163,7 @@ namespace UnscriptedEngine
             DeInitializeAllComponents();
         }
 
-        protected override void OnDestroy()
+        public override void OnDestroy()
         {
             base.OnDestroy();
 

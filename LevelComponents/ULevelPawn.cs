@@ -110,7 +110,7 @@ namespace UnscriptedEngine
             DisableInput(GameMode.InputContext);
         }
 
-        protected override void OnDestroy()
+        public override void OnDestroy()
         {
             if (isUsingDefaultInputMap)
             {
