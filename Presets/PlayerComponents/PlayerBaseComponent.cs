@@ -1,6 +1,7 @@
+using Unity.Netcode;
 using UnityEngine;
 
-public class PlayerBaseComponent : MonoBehaviour
+public class PlayerBaseComponent : NetworkBehaviour
 {
     [System.Serializable]
     public class ComponentInputPriority
