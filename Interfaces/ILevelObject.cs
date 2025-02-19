@@ -4,5 +4,5 @@ using UnityEngine;
 
 public interface ILevelObject
 {
-
+    public GameObject gameObject { get; }
 }
