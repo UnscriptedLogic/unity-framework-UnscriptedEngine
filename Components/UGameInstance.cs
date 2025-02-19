@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnscriptedEngine;
 
-public class UGameInstance : UObject
+public class UGameInstance : UNetworkedObject
 {
     public static UGameInstance singleton { get; private set; } = null;
 

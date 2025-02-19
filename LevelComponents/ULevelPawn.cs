@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 
 namespace UnscriptedEngine
 {
-    public abstract class ULevelPawn : ULevelObject
+    public abstract class ULevelPawn : UNetworkedLevelObject
     {
         protected bool isUsingDefaultInputMap = false;
 

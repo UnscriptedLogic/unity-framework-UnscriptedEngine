@@ -1,5 +1,5 @@
 using UnityEngine;
-using static UnscriptedEngine.UObject;
+using static UnscriptedEngine.UNetworkedObject;
 
 public interface IUsesCamera
 {

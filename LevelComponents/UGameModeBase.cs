@@ -8,7 +8,7 @@ using UnityEngine.SceneManagement;
 namespace UnscriptedEngine
 {
     [DefaultExecutionOrder(-1)]
-    public abstract class UGameModeBase : UObject
+    public abstract class UGameModeBase : UNetworkedObject
     {
         public class LoadProcess
         {

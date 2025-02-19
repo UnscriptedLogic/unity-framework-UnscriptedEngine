@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
+using Unity.Netcode;
 
 namespace UnscriptedEngine
 {
-    public class UObject : MonoBehaviour
+    public class UNetworkedObject : NetworkBehaviour
     {
-        public T CastTo<T>() where T : UObject
+        public T CastTo<T>() where T : UNetworkedObject
         {
             if (this as T)
             {
@@ -16,7 +16,7 @@ namespace UnscriptedEngine
             return default(T);
         }
 
-        public void CastTo<T>(Action<T> OnSuccess, Action OnFailure = null) where T : UObject
+        public void CastTo<T>(Action<T> OnSuccess, Action OnFailure = null) where T : UNetworkedObject
         {
             if (this as T)
             {
@@ -56,5 +56,6 @@ namespace UnscriptedEngine
                 _value = initialValue;
             }
         }
-    } 
+    }
+
 }

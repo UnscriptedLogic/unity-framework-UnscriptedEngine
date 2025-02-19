@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine
 {
-    public abstract class ULevelObject : UObject
+    public class ULevelObject : UObject
     {
         private UGameModeBase gameMode;
 
@@ -85,8 +85,8 @@ namespace UnscriptedEngine
             return canvasController;
         }
 
-        public virtual void DettachUIWidget(GameObject widget) 
-        { 
+        public virtual void DettachUIWidget(GameObject widget)
+        {
             UCanvasController uCanvasController = widget.GetComponent<UCanvasController>();
             uCanvasController.OnWidgetDetached(this);
 
@@ -101,14 +101,12 @@ namespace UnscriptedEngine
             Destroy(widget.gameObject);
         }
 
-        public override void OnDestroy()
+        public virtual void OnDestroy()
         {
             GameMode.OnLevelStarted -= LevelStarted;
             GameMode.OnLevelFinished -= LevelStopped;
 
             FireObjectDestroyedEvent();
-
-            base.OnDestroy();
         }
 
         public Vector3 SnapToGrid(Vector3 position, float cellSize, Vector3 gridOrigin)
@@ -119,5 +117,5 @@ namespace UnscriptedEngine
 
             return new Vector3(snappedX, snappedY, snappedZ);
         }
-    }  
+    } 
 }
