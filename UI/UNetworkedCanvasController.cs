@@ -6,7 +6,7 @@ using UnityEngine.Events;
 
 namespace UnscriptedEngine
 {
-    public class UNetworkedCanvasController : UNetworkedLevelObject
+    public class UNetworkedCanvasController : UNetworkedLevelObject, ICanvasController
     {
         [SerializeField] private UTheme theme;
         [SerializeField] private Dictionary<string, UUIComponent> components;

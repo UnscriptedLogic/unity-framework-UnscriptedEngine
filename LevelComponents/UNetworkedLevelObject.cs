@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine
 {
-    public abstract class UNetworkedLevelObject : UNetworkedObject
+    public abstract class UNetworkedLevelObject : UNetworkedObject, ILevelObject
     {
         private UGameModeBase gameMode;
 

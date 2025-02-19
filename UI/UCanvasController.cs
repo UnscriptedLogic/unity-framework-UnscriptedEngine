@@ -6,10 +6,12 @@ using UnityEngine.Events;
 
 namespace UnscriptedEngine
 {
-    public class UCanvasController : ULevelObject
+    public class UCanvasController : ULevelObject, ICanvasController
     {
         [SerializeField] private UTheme theme;
         [SerializeField] private Dictionary<string, UUIComponent> components;
+
+        protected ILevelObject context;
 
         public UTheme CanvasTheme => theme;
 
@@ -17,8 +19,10 @@ namespace UnscriptedEngine
         /// Called when this UI controller has been created.
         /// </summary>
         /// <param name="context"></param>
-        public virtual void OnWidgetAttached(ULevelObject context) 
+        public virtual void OnWidgetAttached(ILevelObject context) 
         {
+            this.context = context;
+
             components = new Dictionary<string, UUIComponent>();
 
             BroadcastMessage("InitializeUIComponent", this, SendMessageOptions.DontRequireReceiver);
@@ -28,7 +32,7 @@ namespace UnscriptedEngine
         /// Called when this object is to be destroyed 
         /// </summary>
         /// <param name="context"></param>
-        public virtual void OnWidgetDetached(ULevelObject context)
+        public virtual void OnWidgetDetached(ILevelObject context)
         {
             DeInitializeAllComponents();
         }

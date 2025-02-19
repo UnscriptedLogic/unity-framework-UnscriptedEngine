@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine
 {
-    public class ULevelObject : UObject
+    public class ULevelObject : UObject, ILevelObject
     {
         private UGameModeBase gameMode;
 
@@ -70,17 +70,17 @@ namespace UnscriptedEngine
             process.Completed();
         }
 
-        public virtual UCanvasController AttachUIWidget(GameObject widget)
+        public virtual ICanvasController AttachUIWidget(GameObject widget)
         {
             GameObject uiWidget = Instantiate(widget, transform);
-            UCanvasController canvasController = uiWidget.GetComponent<UCanvasController>();
+            ICanvasController canvasController = uiWidget.GetComponent<ICanvasController>();
             canvasController.OnWidgetAttached(this);
             return canvasController;
         }
 
-        public virtual T AttachUIWidget<T>(T widget) where T : UCanvasController
+        public virtual T AttachUIWidget<T>(T widget) where T : ICanvasController
         {
-            T canvasController = Instantiate(widget, transform);
+            T canvasController = Instantiate(widget.gameObject, transform).GetComponent<T>();
             canvasController.OnWidgetAttached(this);
             return canvasController;
         }
