@@ -70,32 +70,32 @@ namespace UnscriptedEngine
             process.Completed();
         }
 
-        public virtual UNetworkedCanvasController AttachUIWidget(GameObject widget)
+        public virtual ICanvasController AttachUIWidget(GameObject widget)
         {
             GameObject uiWidget = Instantiate(widget, transform);
-            UNetworkedCanvasController canvasController = uiWidget.GetComponent<UNetworkedCanvasController>();
+            ICanvasController canvasController = uiWidget.GetComponent<ICanvasController>();
             canvasController.OnWidgetAttached(this);
             return canvasController;
         }
 
-        public virtual T AttachUIWidget<T>(T widget) where T : UNetworkedCanvasController
+        public virtual T AttachUIWidget<T>(T widget) where T : ICanvasController
         {
-            T canvasController = Instantiate(widget, transform);
+            T canvasController = Instantiate(widget.gameObject, transform).GetComponent<T>();
             canvasController.OnWidgetAttached(this);
             return canvasController;
         }
 
         public virtual void DettachUIWidget(GameObject widget) 
-        { 
-            UNetworkedCanvasController uCanvasController = widget.GetComponent<UNetworkedCanvasController>();
+        {
+            ICanvasController uCanvasController = widget.GetComponent<ICanvasController>();
             uCanvasController.OnWidgetDetached(this);
 
             Destroy(widget);
         }
 
-        public virtual void DettachUIWidget<T>(T widget) where T : UNetworkedCanvasController
+        public virtual void DettachUIWidget<T>(T widget) where T : ICanvasController
         {
-            T uCanvasController = widget.GetComponent<T>();
+            T uCanvasController = widget.gameObject.GetComponent<T>();
             uCanvasController.OnWidgetDetached(this);
 
             Destroy(widget.gameObject);
