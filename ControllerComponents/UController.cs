@@ -48,7 +48,7 @@ namespace UnscriptedEngine
         }
 
 
-        protected virtual void UnPossessPawn() 
+        public virtual void UnPossessPawn() 
         {
             if (possessedPawn != null)
             {
