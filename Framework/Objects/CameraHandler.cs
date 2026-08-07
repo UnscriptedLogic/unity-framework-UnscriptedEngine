@@ -89,15 +89,33 @@ namespace Framework.Objects
         private void FollowMagnet(CameraMagnetComponent magnet, bool magnetChanged)
         {
             Vector3 targetPosition = magnet.GetCameraPosition();
+            bool shouldSnap = followSharpness <= 0f || (magnetChanged && snapWhenMagnetChanges);
 
-            if (followSharpness <= 0f || (magnetChanged && snapWhenMagnetChanges))
+            if (shouldSnap)
             {
                 transform.position = targetPosition;
+            }
+            else
+            {
+                float lerpAmount = 1f - Mathf.Exp(-followSharpness * Time.deltaTime);
+                transform.position = Vector3.Lerp(transform.position, targetPosition, lerpAmount);
+            }
+
+            if (!magnet.FollowTargetRotation)
+            {
                 return;
             }
 
-            float lerpAmount = 1f - Mathf.Exp(-followSharpness * Time.deltaTime);
-            transform.position = Vector3.Lerp(transform.position, targetPosition, lerpAmount);
+            Quaternion targetRotation = magnet.GetCameraRotation();
+
+            if (shouldSnap)
+            {
+                transform.rotation = targetRotation;
+                return;
+            }
+
+            float rotationLerpAmount = 1f - Mathf.Exp(-followSharpness * Time.deltaTime);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, rotationLerpAmount);
         }
 
         private CameraMagnetComponent GetTopMagnet()

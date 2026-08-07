@@ -8,6 +8,7 @@ namespace Framework.Components
     {
         [SerializeField] private GameObject targetGameObject;
         [SerializeField] private Vector3 followOffset;
+        [SerializeField] private bool followTargetRotation;
         [SerializeField] private bool pullOnBeginPlay;
         [SerializeField] private bool onlyOwnerCanPull = true;
 
@@ -23,6 +24,12 @@ namespace Framework.Components
         {
             get => followOffset;
             set => followOffset = value;
+        }
+
+        public bool FollowTargetRotation
+        {
+            get => followTargetRotation;
+            set => followTargetRotation = value;
         }
 
         public void SetTarget(GameObject newTarget)
@@ -90,6 +97,14 @@ namespace Framework.Components
             return targetTransform != null
                 ? targetTransform.position + followOffset
                 : transform.position + followOffset;
+        }
+
+        public Quaternion GetCameraRotation()
+        {
+            Transform targetTransform = TargetTransform;
+            return targetTransform != null
+                ? targetTransform.rotation
+                : transform.rotation;
         }
 
         protected override void BeginPlay()

@@ -20,3 +20,8 @@
 #V0.0.5
 
 - added OnPossess and OnUnPossess for pawns
+
+# V0.1.2
+
+- added a persistent UGameInstance lifecycle for application-wide state
+- added optional target rotation following to camera magnets
