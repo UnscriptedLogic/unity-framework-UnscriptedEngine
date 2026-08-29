@@ -13,9 +13,11 @@ public class UButtonComponent : UObjectComponent
     [Header("Button Events")]
     [SerializeField] private UnityEvent onButtonPressedServer;
     [SerializeField] private UnityEvent onButtonPressedClient;
+    [SerializeField] private UnityEvent onButtonInteractedLocally;
     
     public void Interact()
     {
+        onButtonInteractedLocally?.Invoke();
         InteractServerRpc();
     }
     
