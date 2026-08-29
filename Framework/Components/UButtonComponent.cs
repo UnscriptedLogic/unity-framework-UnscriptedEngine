@@ -3,11 +3,16 @@ using Framework;
 using Framework.Components;
 using Unity.Netcode;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class UButtonComponent : UObjectComponent
 {
     public event Action<UButtonComponent> OnButtonPressedServer;
     public event Action<UButtonComponent> OnButtonPressedClient;
+
+    [Header("Button Events")]
+    [SerializeField] private UnityEvent onButtonPressedServer;
+    [SerializeField] private UnityEvent onButtonPressedClient;
     
     public void Interact()
     {
@@ -20,11 +25,13 @@ public class UButtonComponent : UObjectComponent
         InteractClientRpc();
         
         OnButtonPressedServer?.Invoke(this);
+        onButtonPressedServer?.Invoke();
     }
 
     [Rpc(SendTo.Everyone, InvokePermission = RpcInvokePermission.Server)]
     private void InteractClientRpc()
     {
         OnButtonPressedClient?.Invoke(this);
+        onButtonPressedClient?.Invoke();
     }
 }
