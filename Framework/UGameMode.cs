@@ -20,6 +20,8 @@ namespace Framework
         private readonly HashSet<ulong> pendingPlayerRegistrations = new();
         private readonly Dictionary<ulong, NetworkObject> spawnedDefaultPawns = new();
 
+        private Coroutine initializationCoroutine;
+
         protected NetworkManager networkManager;
         protected UGameState gameState;
 
@@ -45,11 +47,13 @@ namespace Framework
                 return;
             }
 
-            InitializeGameMode();
+            initializationCoroutine = StartCoroutine(InitializeGameModeWhenReady());
         }
 
         public override void OnNetworkDespawn()
         {
+            StopInitializationCoroutine();
+
             if (Instance == this)
             {
                 UninitializeGameMode();
@@ -60,6 +64,8 @@ namespace Framework
 
         public override void OnDestroy()
         {
+            StopInitializationCoroutine();
+
             if (Instance == this)
             {
                 UninitializeGameMode();
@@ -107,6 +113,38 @@ namespace Framework
             GameModeInitialized?.Invoke(this);
         }
 
+        private IEnumerator InitializeGameModeWhenReady()
+        {
+            while (!IsInitialized && isActiveAndEnabled && IsServer)
+            {
+                InitializeGameMode();
+
+                if (IsInitialized)
+                {
+                    initializationCoroutine = null;
+                    yield break;
+                }
+
+                // Scene NetworkObjects do not necessarily receive OnNetworkSpawn in
+                // hierarchy order. Give the GameState and NetworkManager a chance to
+                // finish spawning before trying again.
+                yield return null;
+            }
+
+            initializationCoroutine = null;
+        }
+
+        private void StopInitializationCoroutine()
+        {
+            if (initializationCoroutine == null)
+            {
+                return;
+            }
+
+            StopCoroutine(initializationCoroutine);
+            initializationCoroutine = null;
+        }
+
         protected virtual bool RegisterGameState()
         {
             gameState = UGameState.Instance != null
@@ -121,7 +159,6 @@ namespace Framework
 
             if (!gameState.IsSpawned)
             {
-                Debug.LogError($"{nameof(UGameState)} must be on a spawned {nameof(NetworkObject)} before {nameof(UGameMode)} can initialize.");
                 return false;
             }
 
@@ -147,7 +184,6 @@ namespace Framework
 
             if (!activeNetworkManager.IsListening)
             {
-                Debug.LogError($"{nameof(UGameMode)} cannot initialize before the {nameof(NetworkManager)} is listening.");
                 return false;
             }
 
@@ -281,6 +317,7 @@ namespace Framework
 
         private void UninitializeGameMode()
         {
+            StopInitializationCoroutine();
             DespawnAllDefaultPawns();
             UnregisterNetworkManager();
 
