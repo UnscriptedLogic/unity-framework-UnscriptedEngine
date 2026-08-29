@@ -1,3 +1,8 @@
+# V0.1.6
+
+- added local-only button interaction UnityEvent support
+- prevented button RPC calls when its NetworkObject is not spawned
+
 # V0.0.1
 
 - converted project into package for distribution

@@ -18,7 +18,11 @@ public class UButtonComponent : UObjectComponent
     public void Interact()
     {
         onButtonInteractedLocally?.Invoke();
-        InteractServerRpc();
+
+        if (IsSpawned)
+        {
+            InteractServerRpc();
+        }
     }
     
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Server)]
