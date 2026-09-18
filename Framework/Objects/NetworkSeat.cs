@@ -4,7 +4,7 @@ using UnityEngine;
 
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkObject))]
-[RequireComponent(typeof(UButtonComponent))]
+[RequireComponent(typeof(UInteractableComponent))]
 public class NetworkSeat : NetworkBehaviour
 {
     [Header("Seat Pose")]

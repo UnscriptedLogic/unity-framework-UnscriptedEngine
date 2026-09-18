@@ -5,10 +5,10 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Events;
 
-public class UButtonComponent : UObjectComponent
+public class UInteractableComponent : UObjectComponent
 {
-    public event Action<UButtonComponent> OnButtonPressedServer;
-    public event Action<UButtonComponent> OnButtonPressedClient;
+    public event Action<UInteractableComponent> OnButtonPressedServer;
+    public event Action<UInteractableComponent> OnButtonPressedClient;
 
     [Header("Button Events")]
     [SerializeField] private UnityEvent onButtonPressedServer;
@@ -23,6 +23,16 @@ public class UButtonComponent : UObjectComponent
         {
             InteractServerRpc();
         }
+    }
+    
+    public void InteractClient()
+    {
+        InteractClientRpc();
+    }
+    
+    public void InteractServer()
+    {
+        InteractServerRpc();
     }
     
     [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Server)]

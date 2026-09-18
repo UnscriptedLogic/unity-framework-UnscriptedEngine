@@ -7,11 +7,11 @@ namespace Framework.Components
     {
         [SerializeField] private float interactionRange = 2f;
         
-        private UButtonComponent[] _buttonComponents;
+        private UInteractableComponent[] _buttonComponents;
         
-        public UButtonComponent[] ButtonComponents => _buttonComponents;
+        public UInteractableComponent[] ButtonComponents => _buttonComponents;
         public bool HasAnyButtons => _buttonComponents.Length > 0;
-        public UButtonComponent FirstButton => _buttonComponents.FirstOrDefault();
+        public UInteractableComponent FirstInteractable => _buttonComponents.FirstOrDefault();
         
         protected override void Tick(float deltaTime)
         {
@@ -19,7 +19,7 @@ namespace Framework.Components
             
             //check in a sphere around you and see if there are any UButtonComponents
             Collider[] colliders = Physics.OverlapSphere(transform.position, interactionRange);
-            _buttonComponents = colliders.Select(c => c.GetComponent<UButtonComponent>()).Where(b => b != null).ToArray();
+            _buttonComponents = colliders.Select(c => c.GetComponent<UInteractableComponent>()).Where(b => b != null).ToArray();
         }
         
         private void OnDrawGizmosSelected()
