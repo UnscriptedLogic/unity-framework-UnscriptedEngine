@@ -1,7 +1,7 @@
-using Framework.Objects;
+using UnscriptedEngine;
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     [DisallowMultipleComponent]
     public class CameraMagnetComponent : UObjectComponent

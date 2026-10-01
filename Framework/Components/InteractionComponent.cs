@@ -1,7 +1,7 @@
 ﻿using System.Linq;
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     public class InteractionComponent : UObjectComponent
     {

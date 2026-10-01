@@ -2,7 +2,7 @@ using System;
 using Unity.Netcode;
 using UnityEngine;
 
-namespace Framework
+namespace UnscriptedEngine
 {
     public abstract class UObject : NetworkBehaviour
     {

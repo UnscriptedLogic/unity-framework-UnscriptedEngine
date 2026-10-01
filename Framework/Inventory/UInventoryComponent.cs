@@ -1,200 +1,124 @@
 using System;
-using Framework.Components;
+using System.Collections.Generic;
+using Framework;
 using Unity.Netcode;
 using UnityEngine;
 
-namespace Framework.Inventory
+namespace UnscriptedEngine
 {
-    public sealed class UInventoryComponent : UObjectComponent
+    public class UInventoryComponent : UObjectComponent
     {
-        [SerializeField] private UInventoryContainer uInventory = new();
-        [SerializeField, Min(0.1f)] private float pickupRange = 2f;
-        [SerializeField] private int selectedSlot;
-        [SerializeField, Min(1)] private int dropAmount = 1;
-        [SerializeField] private float dropDistance = 1.5f;
-        public event Action<int> SlotChanged;
-        public UInventoryContainer UInventory => uInventory;
-        public int SelectedSlot => selectedSlot;
+        [SerializeField] private int inventorySize = 10;
+        
+        private Dictionary<ItemDataSO, int> itemToSlotDict;
+        private InventorySlot[] inventorySlotsArray;
+        private List<int> freeSlotIndexesList;
 
-        public void SetSelectedSlot(int slot)
+        protected override void BeginPlay()
         {
-            selectedSlot = Mathf.Clamp(slot, 0, uInventory.Capacity - 1);
+            base.BeginPlay();
+            
+            Initialize();
         }
 
-        /// Finds the closest world item locally, then asks the server to validate and complete the pickup.
-        public void RequestPickUp()
+        public void Initialize()
         {
-            UItemWorldEntity target = FindClosestWorldItem();
-            if (target == null || target.NetworkObject == null || !target.NetworkObject.IsSpawned)
+            itemToSlotDict = new Dictionary<ItemDataSO, int>();
+            inventorySlotsArray = new InventorySlot[inventorySize];
+            
+            freeSlotIndexesList = new List<int>();
+            // Keep the lowest free index at the end for O(1) lookup and removal.
+            for (int i = inventorySlotsArray.Length - 1; i >= 0; i--)
             {
-                return;
-            }
-
-            RequestPickUp(target.NetworkObject, dropAmount);
-        }
-
-        public void RequestPickUp(NetworkObject target, int amount = 1)
-        {
-            if (target == null || !target.IsSpawned || amount <= 0)
-            {
-                return;
-            }
-
-            NetworkObjectReference targetReference = new(target);
-            if (IsServer)
-            {
-                HandlePickUp(targetReference, amount);
-            }
-            else
-            {
-                RequestPickUpServerRpc(targetReference, amount);
+                freeSlotIndexesList.Add(i);
             }
         }
-
-        /// Requests one stack portion from the currently selected slot to be dropped in front of the owner.
-        public void RequestDrop()
+        
+        public OperationResult TryAddItem(ItemDataSO itemDataSo)
         {
-            RequestDrop(selectedSlot, dropAmount);
-        }
-
-        public void RequestDrop(int slot, int amount = 1)
-        {
-            if (amount <= 0)
+            OperationResult operationResult = new OperationResult
             {
-                return;
+                Success = false,
+                SlotIndex = -1,
+                Message = "No empty inventory slot available"
+            };
+
+            if (itemDataSo == null)
+            {
+                operationResult.Message = "Item data is null";
+                return operationResult;
             }
 
-            if (IsServer)
+            if (HasItem(itemDataSo, out int existingIndex))
             {
-                HandleDrop(slot, amount);
-            }
-            else
-            {
-                RequestDropServerRpc(slot, amount);
-            }
-        }
-
-        public bool TryAdd(UItemStack stack, out UItemStack remainder)
-        {
-            bool fullyAdded = uInventory.TryAdd(stack, out remainder);
-            for (int i = 0; i < uInventory.Capacity; i++) SlotChanged?.Invoke(i);
-            return fullyAdded;
-        }
-
-        public UItemStack Remove(int slot, int amount)
-        {
-            UItemStack result = uInventory.Remove(slot, amount);
-            SlotChanged?.Invoke(slot);
-            return result;
-        }
-
-        public void SetSlot(int slot, UItemStack stack)
-        {
-            uInventory.SetSlot(slot, stack);
-            SlotChanged?.Invoke(slot);
-        }
-
-        [ServerRpc]
-        private void RequestPickUpServerRpc(NetworkObjectReference targetReference, int amount)
-        {
-            HandlePickUp(targetReference, amount);
-        }
-
-        [ServerRpc]
-        private void RequestDropServerRpc(int slot, int amount)
-        {
-            HandleDrop(slot, amount);
-        }
-
-        private void HandlePickUp(NetworkObjectReference targetReference, int amount)
-        {
-            if (!targetReference.TryGet(out NetworkObject targetObject) || targetObject == null || !targetObject.IsSpawned)
-            {
-                return;
+                operationResult.SlotIndex = existingIndex;
+                operationResult.Message = "Item already exists in inventory";
+                return operationResult;
             }
 
-            UItemWorldEntity worldItem = targetObject.GetComponent<UItemWorldEntity>();
-            if (worldItem == null || Vector3.Distance(transform.position, worldItem.transform.position) > pickupRange + worldItem.PickupRadius)
+            if (HasEmptySlot(out int emptyIndex))
             {
-                return;
-            }
+                freeSlotIndexesList.RemoveAt(freeSlotIndexesList.Count - 1);
+                itemToSlotDict.Add(itemDataSo, emptyIndex);
+                
+                operationResult.Success = true;
+                operationResult.SlotIndex = emptyIndex;
+                operationResult.Message = "Item added successfully";
 
-            UItemStack requested = worldItem.Stack.Clone(Mathf.Min(amount, worldItem.Stack.Quantity));
-            if (requested.IsEmpty)
-            {
-                return;
-            }
-
-            TryAdd(requested, out UItemStack remainder);
-            int accepted = requested.Quantity - remainder.Quantity;
-            if (accepted <= 0)
-            {
-                return;
-            }
-
-            worldItem.Take(accepted);
-            if (worldItem.Stack.IsEmpty)
-            {
-                targetObject.Despawn(true);
-            }
-        }
-
-        private void HandleDrop(int slot, int amount)
-        {
-            if (slot < 0 || slot >= uInventory.Capacity || amount <= 0)
-            {
-                return;
-            }
-
-            UItemStack stack = uInventory.Slots[slot];
-            if (stack == null || stack.IsEmpty || stack.Definition.DroppedPrefab == null)
-            {
-                return;
-            }
-
-            UItemStack dropped = Remove(slot, Mathf.Min(amount, stack.Quantity));
-            if (dropped.IsEmpty)
-            {
-                return;
-            }
-
-            GameObject droppedObject = Instantiate(dropped.Definition.DroppedPrefab, transform.position + transform.forward * dropDistance, transform.rotation);
-            UItemWorldEntity worldItem = droppedObject.GetComponent<UItemWorldEntity>();
-            NetworkObject networkObject = droppedObject.GetComponent<NetworkObject>();
-            if (worldItem == null || networkObject == null)
-            {
-                Destroy(droppedObject);
-                TryAdd(dropped, out _);
-                return;
-            }
-
-            worldItem.Initialize(dropped);
-            networkObject.Spawn();
-        }
-
-        private UItemWorldEntity FindClosestWorldItem()
-        {
-            Collider[] colliders = Physics.OverlapSphere(transform.position, pickupRange);
-            UItemWorldEntity closest = null;
-            float closestSqrDistance = float.MaxValue;
-
-            for (int i = 0; i < colliders.Length; i++)
-            {
-                UItemWorldEntity candidate = colliders[i].GetComponentInParent<UItemWorldEntity>();
-                if (candidate == null || candidate.Stack.IsEmpty)
+                EventBus.Publish(new EB_InventoryAddedItem()
                 {
-                    continue;
-                }
+                    Inventory = this,
+                    ItemAdded = itemDataSo
+                });
+            }
+            
+            return operationResult;
+        }
 
-                float sqrDistance = (candidate.transform.position - transform.position).sqrMagnitude;
-                if (sqrDistance < closestSqrDistance)
-                {
-                    closest = candidate;
-                    closestSqrDistance = sqrDistance;
-                }
+        public bool HasItem(ItemDataSO itemDataSo)
+        {
+            return HasItem(itemDataSo, out _);
+        }
+
+        public bool HasItem(ItemDataSO itemDataSo, out int slotIndex)
+        {
+            if (itemDataSo != null && itemToSlotDict.TryGetValue(itemDataSo, out slotIndex))
+            {
+                return true;
             }
 
-            return closest;
+            slotIndex = -1;
+            return false;
+        }
+
+        public int InventorySize => inventorySize;
+        public IReadOnlyDictionary<ItemDataSO, int> Items => itemToSlotDict;
+
+        public bool HasEmptySlot(out int emptyIndex)
+        {
+            if (freeSlotIndexesList.Count > 0)
+            {
+                emptyIndex = freeSlotIndexesList[^1];
+                return true;
+            }
+            
+            emptyIndex = -1;
+            return false;
+        }
+        
+        
+
+        public struct OperationResult
+        {
+            public bool Success;
+            public int SlotIndex;
+            public string Message;
+        }
+        
+        public class EB_InventoryAddedItem
+        {
+            public UInventoryComponent Inventory;
+            public ItemDataSO ItemAdded;
         }
     }
 }

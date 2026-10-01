@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Framework.Components;
 using UnityEngine;
 
-namespace Framework.Objects
+namespace UnscriptedEngine
 {
     [DisallowMultipleComponent]
     public class CameraHandler : MonoBehaviour

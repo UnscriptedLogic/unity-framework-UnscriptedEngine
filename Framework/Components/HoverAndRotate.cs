@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     /// <summary>
     /// Makes an object hover up and down while rotating continuously.

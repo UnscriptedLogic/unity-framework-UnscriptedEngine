@@ -3,7 +3,7 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Pool;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     public class KnockbackBombComponent : UObjectComponent
     {

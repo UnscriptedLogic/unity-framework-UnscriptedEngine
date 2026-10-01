@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     public class MovementVaultingComponent : UObjectComponent
     {

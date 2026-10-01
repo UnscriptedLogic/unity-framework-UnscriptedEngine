@@ -1,6 +1,6 @@
 using Unity.Netcode;
 
-namespace Framework
+namespace UnscriptedEngine
 {
     public abstract class UPawn : UObject
     {

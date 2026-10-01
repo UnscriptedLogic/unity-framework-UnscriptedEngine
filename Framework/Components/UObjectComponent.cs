@@ -1,7 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     public abstract class UObjectComponent : NetworkBehaviour
     {

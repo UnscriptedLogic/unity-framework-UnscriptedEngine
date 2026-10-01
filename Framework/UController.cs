@@ -1,7 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 
-namespace Framework
+namespace UnscriptedEngine
 {
     public abstract class UController : UObject
     {

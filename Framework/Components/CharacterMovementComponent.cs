@@ -2,7 +2,7 @@ using System;
 using Unity.Netcode;
 using UnityEngine;
 
-namespace Framework.Components
+namespace UnscriptedEngine
 {
     [DisallowMultipleComponent]
     [RequireComponent(typeof(CharacterController))]
@@ -15,8 +15,10 @@ namespace Framework.Components
             public float DeltaTime;
             public float MoveX;
             public float MoveY;
+            public float MoveZ;
             public float ControlYaw;
             public bool JumpPressed;
+            public bool IsFlying;
 
             public bool Equals(CharacterMoveInput other)
             {
@@ -24,8 +26,10 @@ namespace Framework.Components
                     && DeltaTime.Equals(other.DeltaTime)
                     && MoveX.Equals(other.MoveX)
                     && MoveY.Equals(other.MoveY)
+                    && MoveZ.Equals(other.MoveZ)
                     && ControlYaw.Equals(other.ControlYaw)
-                    && JumpPressed == other.JumpPressed;
+                    && JumpPressed == other.JumpPressed
+                    && IsFlying == other.IsFlying;
             }
 
             public override bool Equals(object obj)
@@ -35,7 +39,7 @@ namespace Framework.Components
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, ControlYaw, JumpPressed);
+                return HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, MoveZ, ControlYaw, JumpPressed, IsFlying);
             }
         }
 
@@ -45,13 +49,15 @@ namespace Framework.Components
             public Vector3 Position;
             public Vector3 Velocity;
             public bool IsGrounded;
+            public bool IsFlying;
 
-            public CharacterMoveState(int tick, Vector3 position, Vector3 velocity, bool isGrounded)
+            public CharacterMoveState(int tick, Vector3 position, Vector3 velocity, bool isGrounded, bool isFlying)
             {
                 Tick = tick;
                 Position = position;
                 Velocity = velocity;
                 IsGrounded = isGrounded;
+                IsFlying = isFlying;
             }
 
             public bool Equals(CharacterMoveState other)
@@ -59,7 +65,8 @@ namespace Framework.Components
                 return Tick == other.Tick
                     && Position.Equals(other.Position)
                     && Velocity.Equals(other.Velocity)
-                    && IsGrounded == other.IsGrounded;
+                    && IsGrounded == other.IsGrounded
+                    && IsFlying == other.IsFlying;
             }
 
             public override bool Equals(object obj)
@@ -69,7 +76,7 @@ namespace Framework.Components
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(Tick, Position, Velocity, IsGrounded);
+                return HashCode.Combine(Tick, Position, Velocity, IsGrounded, IsFlying);
             }
         }
 
@@ -79,6 +86,12 @@ namespace Framework.Components
         [SerializeField] private float brakingDecelerationWalking = 32f;
         [SerializeField] private float airControl = 0.35f;
         [SerializeField] private bool orientInputToControlYaw = true;
+
+        [Header("Flying")]
+        [SerializeField] private bool isFlying;
+        [SerializeField] private float maxFlySpeed = 6f;
+        [SerializeField] private float flightAcceleration = 24f;
+        [SerializeField] private float brakingDecelerationFlying = 32f;
 
         [Header("Jumping")]
         [SerializeField] private float jumpVelocity = 7.5f;
@@ -110,6 +123,7 @@ namespace Framework.Components
         private CharacterMoveInput[] inputBuffer;
         private CharacterMoveState[] stateBuffer;
         private Vector2 pendingMoveInput;
+        private float pendingVerticalMoveInput;
         private bool jumpQueued;
         private float controlYaw;
         private Vector3 velocity;
@@ -129,13 +143,18 @@ namespace Framework.Components
 
         public Vector3 Velocity => velocity;
 
+        public Vector3 SimulationPosition => hasInterpolatedTransform ? currentFixedPosition : transform.position;
+        public float WalkAcceleration => acceleration;
+
         public NetworkVariable<CharacterMoveState> AuthoritativeState => authoritativeState;
 
         public bool IsGrounded => isGrounded;
 
-        public bool IsFalling => !isGrounded;
+        public bool IsFlying => isFlying;
 
-        public bool CanJump => isGrounded;
+        public bool IsFalling => !isGrounded && !isFlying;
+
+        public bool CanJump => isGrounded && !isFlying;
 
         public float MaxWalkSpeed
         {
@@ -143,22 +162,39 @@ namespace Framework.Components
             set => maxWalkSpeed = Mathf.Max(0f, value);
         }
 
+        public float MaxFlySpeed
+        {
+            get => maxFlySpeed;
+            set => maxFlySpeed = Mathf.Max(0f, value);
+        }
+
         public void SetMovementInput(Vector2 input)
         {
             pendingMoveInput = Vector2.ClampMagnitude(input, 1f);
+        }
+
+        public void SetVerticalMovementInput(float input)
+        {
+            pendingVerticalMoveInput = Mathf.Clamp(input, -1f, 1f);
         }
 
         public void AddMovementInput(Vector3 worldDirection, float scale = 1f)
         {
             Vector3 flatDirection = new Vector3(worldDirection.x, 0f, worldDirection.z);
 
-            if (flatDirection.sqrMagnitude <= Mathf.Epsilon)
+            if (flatDirection.sqrMagnitude > Mathf.Epsilon)
             {
-                return;
+                Vector2 input = new Vector2(flatDirection.normalized.x, flatDirection.normalized.z) * scale;
+                pendingMoveInput = Vector2.ClampMagnitude(pendingMoveInput + input, 1f);
             }
 
-            Vector2 input = new Vector2(flatDirection.normalized.x, flatDirection.normalized.z) * scale;
-            pendingMoveInput = Vector2.ClampMagnitude(pendingMoveInput + input, 1f);
+            if (Mathf.Abs(worldDirection.y) > Mathf.Epsilon)
+            {
+                pendingVerticalMoveInput = Mathf.Clamp(
+                    pendingVerticalMoveInput + Mathf.Sign(worldDirection.y) * Mathf.Abs(scale),
+                    -1f,
+                    1f);
+            }
         }
 
         public void SetControlYaw(float yawDegrees)
@@ -166,6 +202,36 @@ namespace Framework.Components
             controlYaw = yawDegrees;
         }
 
+        public void SetGravity(float gravity)
+        {
+            this.gravity = gravity;
+        }
+
+        public void SetFlying(bool flying)
+        {
+            if (isFlying == flying)
+            {
+                return;
+            }
+
+            isFlying = flying;
+
+            if (isFlying)
+            {
+                isGrounded = false;
+                velocity.y = 0f;
+            }
+            else
+            {
+                pendingVerticalMoveInput = 0f;
+            }
+        }
+
+        public void ToggleFlying()
+        {
+            SetFlying(!isFlying);
+        }
+        
         public void Jump()
         {
             jumpQueued = true;
@@ -193,6 +259,9 @@ namespace Framework.Components
             ownerInterpolationSnapDistance = Mathf.Max(0f, ownerInterpolationSnapDistance);
             minimumControllerSkinWidth = Mathf.Max(0f, minimumControllerSkinWidth);
             minimumControllerSkinWidthRadiusRatio = Mathf.Max(0f, minimumControllerSkinWidthRadiusRatio);
+            maxFlySpeed = Mathf.Max(0f, maxFlySpeed);
+            flightAcceleration = Mathf.Max(0f, flightAcceleration);
+            brakingDecelerationFlying = Mathf.Max(0f, brakingDecelerationFlying);
 
             if (characterController == null)
             {
@@ -293,8 +362,10 @@ namespace Framework.Components
                 DeltaTime = Time.fixedDeltaTime,
                 MoveX = pendingMoveInput.x,
                 MoveY = pendingMoveInput.y,
+                MoveZ = pendingVerticalMoveInput,
                 ControlYaw = controlYaw,
-                JumpPressed = jumpQueued
+                JumpPressed = jumpQueued,
+                IsFlying = isFlying
             };
 
             localTick++;
@@ -306,6 +377,7 @@ namespace Framework.Components
             Vector2 move = Vector2.ClampMagnitude(new Vector2(input.MoveX, input.MoveY), 1f);
             input.MoveX = move.x;
             input.MoveY = move.y;
+            input.MoveZ = Mathf.Clamp(input.MoveZ, -1f, 1f);
             input.DeltaTime = Mathf.Clamp(input.DeltaTime, 1f / 120f, 1f / 15f);
             return input;
         }
@@ -319,6 +391,13 @@ namespace Framework.Components
 
             input = SanitizeInput(input);
             isGrounded = characterController.isGrounded;
+            isFlying = input.IsFlying;
+
+            if (isFlying)
+            {
+                SimulateFlyingMove(input);
+                return;
+            }
 
             if (isGrounded && velocity.y < 0f)
             {
@@ -364,9 +443,31 @@ namespace Framework.Components
             }
         }
 
+        private void SimulateFlyingMove(CharacterMoveInput input)
+        {
+            Vector3 desiredDirection = new Vector3(input.MoveX, input.MoveZ, input.MoveY);
+
+            if (orientInputToControlYaw)
+            {
+                Vector3 horizontalDirection = Quaternion.Euler(0f, input.ControlYaw, 0f)
+                    * new Vector3(input.MoveX, 0f, input.MoveY);
+                desiredDirection = new Vector3(horizontalDirection.x, input.MoveZ, horizontalDirection.z);
+            }
+
+            desiredDirection = Vector3.ClampMagnitude(desiredDirection, 1f);
+            Vector3 desiredVelocity = desiredDirection * maxFlySpeed;
+
+            velocity = desiredDirection.sqrMagnitude > Mathf.Epsilon
+                ? Vector3.MoveTowards(velocity, desiredVelocity, flightAcceleration * input.DeltaTime)
+                : Vector3.MoveTowards(velocity, Vector3.zero, brakingDecelerationFlying * input.DeltaTime);
+
+            CollisionFlags collisionFlags = characterController.Move(velocity * input.DeltaTime);
+            isGrounded = (collisionFlags & CollisionFlags.Below) != 0;
+        }
+
         private CharacterMoveState CaptureState(int tick)
         {
-            return new CharacterMoveState(tick, transform.position, velocity, isGrounded);
+            return new CharacterMoveState(tick, transform.position, velocity, isGrounded, isFlying);
         }
 
         private void StoreInput(CharacterMoveInput input)
@@ -470,6 +571,7 @@ namespace Framework.Components
             transform.position = state.Position;
             velocity = state.Velocity;
             isGrounded = state.IsGrounded;
+            isFlying = state.IsFlying;
             ResetFixedPositionSamples(state.Position);
 
             if (controllerWasEnabled)
@@ -495,6 +597,7 @@ namespace Framework.Components
             proxySyncSuppressedUntil = 0f;
             velocity = Vector3.zero;
             isGrounded = characterController != null && characterController.isGrounded;
+            pendingVerticalMoveInput = 0f;
             ResetFixedPositionSamples(transform.position);
             AllocatePredictionBuffers();
         }
@@ -539,8 +642,10 @@ namespace Framework.Components
                 DeltaTime = deltaTime,
                 MoveX = 0f,
                 MoveY = 0f,
+                MoveZ = 0f,
                 ControlYaw = controlYaw,
-                JumpPressed = false
+                JumpPressed = false,
+                IsFlying = isFlying
             };
 
             SimulateMove(proxyInput);
@@ -563,6 +668,7 @@ namespace Framework.Components
             hasProxyTargetState = true;
             velocity = state.Velocity;
             isGrounded = state.IsGrounded;
+            isFlying = state.IsFlying;
         }
 
         private void ConfigureCharacterController()

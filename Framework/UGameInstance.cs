@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Framework
+namespace UnscriptedEngine
 {
     [DefaultExecutionOrder(-10000)]
     [DisallowMultipleComponent]
