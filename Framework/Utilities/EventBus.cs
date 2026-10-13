@@ -5,6 +5,13 @@ using Object = UnityEngine.Object;
 
 namespace UnscriptedEngine
 {
+    public enum AppendStyle
+    {
+        Force,
+        Latest,
+        Earliest
+    }
+
     public static class EventBus
     {
         private static readonly Dictionary<Type, List<ListenerEntry>> _listeners = new();
@@ -13,6 +20,34 @@ namespace UnscriptedEngine
         // Register a method to listen for an event
         public static void Subscribe<T>(Action<T> listener, int priority = 0)
         {
+            SubscribeInternal(listener, priority, null);
+        }
+
+        /// <summary>
+        /// Registers a listener with explicit priority placement. Latest searches upward
+        /// for a free priority; Earliest searches downward. Force shifts all existing
+        /// priorities at or above the requested priority up by one.
+        /// Dispatch still runs from highest priority to lowest priority.
+        /// </summary>
+        /// <exception cref="OverflowException">Placement exceeds the integer priority range.</exception>
+        public static void Subscribe<T>(Action<T> listener, int priority, AppendStyle appendStyle)
+        {
+            if (appendStyle != AppendStyle.Force && appendStyle != AppendStyle.Latest &&
+                appendStyle != AppendStyle.Earliest)
+            {
+                throw new ArgumentOutOfRangeException(nameof(appendStyle));
+            }
+
+            SubscribeInternal(listener, priority, appendStyle);
+        }
+
+        private static void SubscribeInternal<T>(Action<T> listener, int priority, AppendStyle? appendStyle)
+        {
+            if (listener == null)
+            {
+                throw new ArgumentNullException(nameof(listener));
+            }
+
             var type = typeof(T);
             if (!_listeners.TryGetValue(type, out var listeners))
             {
@@ -21,6 +56,42 @@ namespace UnscriptedEngine
             }
 
             RemoveDeadListeners(type, listeners);
+            if (appendStyle == AppendStyle.Force)
+            {
+                // Check before shifting so overflow cannot leave a partially updated list.
+                foreach (var entry in listeners)
+                {
+                    if (entry.Priority == int.MaxValue)
+                    {
+                        throw new OverflowException("Cannot shift a subscriber beyond int.MaxValue.");
+                    }
+                }
+
+                for (var i = 0; i < listeners.Count; i++)
+                {
+                    var entry = listeners[i];
+                    if (entry.Priority >= priority)
+                    {
+                        listeners[i] = new ListenerEntry(entry.Callback, entry.Priority + 1,
+                            entry.SubscriptionOrder);
+                    }
+                }
+            }
+            else if (appendStyle.HasValue)
+            {
+                var occupiedPriorities = new HashSet<int>();
+                foreach (var entry in listeners)
+                {
+                    occupiedPriorities.Add(entry.Priority);
+                }
+
+                var step = appendStyle == AppendStyle.Latest ? 1 : -1;
+                while (occupiedPriorities.Contains(priority))
+                {
+                    priority = checked(priority + step);
+                }
+            }
+
             listeners.Add(new ListenerEntry(listener, priority, _nextSubscriptionOrder++));
             listeners.Sort(CompareListeners);
             _listeners[type] = listeners;

@@ -420,6 +420,14 @@ namespace UnscriptedEngine
             return pawnNetworkObject.TryGetComponent(out pawn);
         }
 
+        protected bool RespawnDefaultPawnForClient(ulong clientId)
+        {
+            if (!IsServer || networkManager == null || !networkManager.ConnectedClients.ContainsKey(clientId))
+                return false;
+            DespawnDefaultPawnForClient(clientId);
+            return RegisterConnectedClient(clientId);
+        }
+
         private void DespawnDefaultPawnForClient(ulong clientId)
         {
             if (!spawnedDefaultPawns.TryGetValue(clientId, out NetworkObject pawnNetworkObject))

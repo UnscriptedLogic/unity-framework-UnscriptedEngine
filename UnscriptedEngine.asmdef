@@ -7,7 +7,8 @@
         "GUID:6055be8ebefd69e48b49212b09b47b2f",
         "GUID:f2d49d9fa7e7eb3418e39723a7d3b92f",
         "GUID:0061587d97f6fd341834706c19c90efa",
-        "Unity.Netcode.Runtime"
+        "Unity.Netcode.Runtime",
+        "Unity.Cinemachine"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

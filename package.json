@@ -9,7 +9,8 @@
     "changelogUrl": "",
     "licensesUrl": "",
     "dependencies": {
-        "com.unity.netcode.gameobjects": "2.13.1"
+        "com.unity.netcode.gameobjects": "2.13.1",
+        "com.unity.cinemachine": "3.1.7"
     },
     "keywords": [
         "UnscriptedLogic",

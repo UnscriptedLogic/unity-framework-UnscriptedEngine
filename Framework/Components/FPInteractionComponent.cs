@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine
 {
-    public class FPInteractionComponent : UObjectComponent
+    public class FPInteractionComponent : UObjectComponent, IInteractionTargetProvider
     {
         private Camera interactionCamera;
         [SerializeField, Min(0f)] private float interactionRange = 2f;
@@ -17,6 +17,7 @@ namespace UnscriptedEngine
         public UInteractableComponent[] ButtonComponents => _buttonComponents;
         public bool HasAnyButtons => _buttonComponents.Length > 0;
         public UInteractableComponent FirstButton => _buttonComponents.FirstOrDefault();
+        public UInteractableComponent FocusedInteractable => FirstButton;
         public RaycastHit HitInfo => _hitInfo;
 
         protected override void Tick(float deltaTime)
@@ -38,7 +39,7 @@ namespace UnscriptedEngine
             }
 
             UInteractableComponent button = _hitInfo.collider.GetComponentInParent<UInteractableComponent>();
-            _buttonComponents = button != null
+            _buttonComponents = button != null && button.isActiveAndEnabled
                 ? new[] { button }
                 : Array.Empty<UInteractableComponent>();
         }

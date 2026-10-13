@@ -87,6 +87,19 @@ namespace UnscriptedEngine
         [SerializeField] private float airControl = 0.35f;
         [SerializeField] private bool orientInputToControlYaw = true;
 
+        [Header("Collision Speed Loss")]
+        [Tooltip("Reduce horizontal velocity on blocking surfaces. Applied in owner prediction and server simulation; walkable ground is ignored.")]
+        [SerializeField] private bool reduceSpeedOnCollision;
+        [Tooltip("Fraction of speed removed by a head-on hit. 1 stops horizontal movement completely; 0 disables speed loss. Strongest contact is applied once per movement step.")]
+        [SerializeField, Range(0f, 1f)] private float collisionSpeedLoss = 1f;
+        [Tooltip("Shapes loss by impact angle: loss = strength * opposition^power. Opposition is 1 head-on and 0 parallel. Higher powers preserve more speed on glancing hits.")]
+        [SerializeField, Min(0.1f)] private float collisionAnglePower = 2f;
+        [Tooltip("Ignore contacts below this opposing-normal dot product (0 = parallel, 1 = head-on). Avoids speed loss from very shallow scrapes.")]
+        [SerializeField, Range(0f, 0.99f)] private float minimumCollisionOpposition = 0.05f;
+        private float collisionRetention = 1f;
+        private bool collectingCollisionLoss;
+        public event Action<float> HorizontalCollisionSpeedReduced;
+
         [Header("Flying")]
         [SerializeField] private bool isFlying;
         [SerializeField] private float maxFlySpeed = 6f;
@@ -142,6 +155,22 @@ namespace UnscriptedEngine
         private bool hasInterpolatedTransform;
 
         public Vector3 Velocity => velocity;
+        private readonly NetworkVariable<bool> movementLocked = new NetworkVariable<bool>(false);
+        public bool IsMovementLocked => movementLocked.Value;
+
+        /// <summary>Server-authoritative input lock, enforced during simulation and replay.</summary>
+        public void SetMovementLocked(bool locked)
+        {
+            if (!IsServer || !IsSpawned) return;
+            movementLocked.Value = locked;
+            if (locked)
+            {
+                pendingMoveInput = Vector2.zero;
+                pendingVerticalMoveInput = 0f;
+                jumpQueued = false;
+                velocity = Vector3.zero;
+            }
+        }
 
         public Vector3 SimulationPosition => hasInterpolatedTransform ? currentFixedPosition : transform.position;
         public float WalkAcceleration => acceleration;
@@ -307,6 +336,9 @@ namespace UnscriptedEngine
                 Vector3 positionBeforeMove = transform.position;
 
                 SimulateMove(input);
+                // Notify gameplay only for a fresh owner step, never during replay.
+                if (collisionRetention < 1f)
+                    HorizontalCollisionSpeedReduced?.Invoke(collisionRetention);
                 StoreFixedPositionSample(positionBeforeMove, transform.position);
                 StoreState(CaptureState(input.Tick));
 
@@ -374,6 +406,12 @@ namespace UnscriptedEngine
 
         private CharacterMoveInput SanitizeInput(CharacterMoveInput input)
         {
+            if (movementLocked.Value)
+            {
+                input.MoveX = input.MoveY = input.MoveZ = 0f;
+                input.JumpPressed = false;
+                input.IsFlying = false;
+            }
             Vector2 move = Vector2.ClampMagnitude(new Vector2(input.MoveX, input.MoveY), 1f);
             input.MoveX = move.x;
             input.MoveY = move.y;
@@ -384,12 +422,18 @@ namespace UnscriptedEngine
 
         private void SimulateMove(CharacterMoveInput input)
         {
+            collisionRetention = 1f;
             if (characterController == null || !characterController.enabled)
             {
                 return;
             }
 
             input = SanitizeInput(input);
+            if (movementLocked.Value)
+            {
+                velocity.x = velocity.z = 0f;
+                velocity.y = Mathf.Min(velocity.y, 0f);
+            }
             isGrounded = characterController.isGrounded;
             isFlying = input.IsFlying;
 
@@ -434,13 +478,40 @@ namespace UnscriptedEngine
                 velocity.y = Mathf.Max(velocity.y + gravity * input.DeltaTime, -terminalVelocity);
             }
 
-            CollisionFlags collisionFlags = characterController.Move(velocity * input.DeltaTime);
+            collectingCollisionLoss = reduceSpeedOnCollision;
+            CollisionFlags collisionFlags;
+            try
+            {
+                collisionFlags = characterController.Move(velocity * input.DeltaTime);
+            }
+            finally
+            {
+                collectingCollisionLoss = false;
+            }
+            velocity.x *= collisionRetention;
+            velocity.z *= collisionRetention;
             isGrounded = (collisionFlags & CollisionFlags.Below) != 0;
 
             if (isGrounded && velocity.y < 0f)
             {
                 velocity.y = -groundedStickForce;
             }
+        }
+
+        private void OnControllerColliderHit(ControllerColliderHit hit)
+        {
+            if (!collectingCollisionLoss || hit.normal.y >=
+                Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)) return;
+
+            Vector3 horizontal = new Vector3(velocity.x, 0f, velocity.z);
+            Vector3 normal = Vector3.ProjectOnPlane(hit.normal, Vector3.up);
+            if (horizontal.sqrMagnitude < 0.000001f || normal.sqrMagnitude < 0.000001f) return;
+
+            float opposition = Mathf.Clamp01(-Vector3.Dot(horizontal.normalized, normal.normalized));
+            if (opposition <= minimumCollisionOpposition) return;
+            float loss = Mathf.Clamp01(collisionSpeedLoss) *
+                Mathf.Pow(opposition, Mathf.Max(0.1f, collisionAnglePower));
+            collisionRetention = Mathf.Min(collisionRetention, 1f - loss);
         }
 
         private void SimulateFlyingMove(CharacterMoveInput input)
