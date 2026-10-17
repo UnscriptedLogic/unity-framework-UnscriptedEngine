@@ -1,0 +1,6 @@
+{
+    "name": "UnscriptedEngine.Editor",
+    "references": ["UnscriptedEngine", "Unity.Netcode.Runtime"],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": true
+}

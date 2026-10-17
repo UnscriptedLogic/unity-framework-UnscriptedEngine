@@ -1,3 +1,10 @@
+# V0.2.1
+
+- Add modular Editor generators for framework scenes and linked controller/pawn prefabs, with optional scene wiring and extensible player templates.
+- Generate acronym-prefixed scripts in a Scripts subfolder and scenes in a Scenes subfolder, creating missing folders automatically.
+- Validate names and output collisions; resume asset generation after script compilation.
+- Runtime and Editor source compilation passed. Unity test execution remains blocked by the missing batch Editor license.
+
 # V0.2.0
 
 - Breaking: UObject/UObjectComponent now own sealed OnNetworkSpawn, OnNetworkDespawn and OnDestroy entry points. Derived classes use OnSpawned, OnDespawned and OnDestroyed hooks instead. Existing framework and project consumers have been migrated.

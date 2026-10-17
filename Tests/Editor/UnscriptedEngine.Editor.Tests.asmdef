@@ -3,6 +3,7 @@
     "rootNamespace": "",
     "references": [
         "UnscriptedEngine",
+        "UnscriptedEngine.Editor",
         "UnscriptedEngine.Tests.Support",
         "Unity.Netcode.Runtime",
         "UnityEngine.TestRunner",
