@@ -1,5 +1,6 @@
 # Unreleased
 
+- Add LogService with source type/context, severity methods, category filtering, a global switch, per-call player-build opt-in, and play-session reset.
 - Add typed setting definitions, nested groups, reference-counted scene modules, validated runtime values, subscriptions, and local JSON preferences.
 - Add generated uGUI settings with search, advanced filtering, collapsible groups, prefab themes, and custom widget hooks.
 - Add optional server-authoritative Netcode settings synchronization and client read-only enforcement.
