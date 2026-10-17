@@ -116,6 +116,37 @@ public sealed class DoorSystem : IDisposable
 
 Use a separate non-cancellable event for notifications after an operation commits. Publish those with `PublishNotification` when exceptions must not prevent later listeners from receiving the notification.
 
+## Player action input
+
+`PlayerController` publishes callbacks from its enabled `Player`, `UI`, and runtime equipment maps as `PlayerActionInputEvent`. Subscribe to this one event type for built-in actions and actions added to those maps; filter by map and action name instead of declaring a new event class. A new action map still needs one map-level subscription and enable call.
+
+```csharp
+using UnscriptedEngine;
+using UnityEngine;
+
+public sealed class DashComponent : MonoBehaviour
+{
+    private void OnEnable() => EventBus.Subscribe<PlayerActionInputEvent>(OnInput, priority: 20);
+    private void OnDisable() => EventBus.Unsubscribe<PlayerActionInputEvent>(OnInput);
+
+    private void OnInput(PlayerActionInputEvent input)
+    {
+        if (input.Controller != GetComponentInParent<PlayerController>()) return;
+        if (!input.IsAction("Player", "Dash") || !input.IsPerformed || !input.IsPressed) return;
+        if (input.IsCancelled || input.IsGameplayBlocked) return;
+
+        Dash();
+        input.Cancel(); // Stops lower-priority listeners for this action callback.
+    }
+
+    private void Dash() { }
+}
+```
+
+`Value` contains the Input System action's value; prefer `TryReadValue<T>` when the action may have different control types. `IsActionCanceled` describes Input System phase, while `IsCancelled` means an EventBus listener consumed the callback. `IsGameplayBlocked` snapshots input-focus state at publication. The bus publishes `started`, `performed`, and `canceled` phases. For an Escape key delivered through `UI/Cancel`, `ActionMap` and `ActionName` use the canonical `Player/Escape` key and `SourceActionMap` / `SourceActionName` retain the original action.
+
+Existing typed player input events remain as a compatibility bridge for current actions. New listeners should use `PlayerActionInputEvent`; adding an action to an Input Action Map then requires no event class or publisher case.
+
 ## ⚠️ Usage limits
 
 - Event channels use the compile-time generic type `T`. Publish and subscribe with the same type. Publishing a derived object through a base-typed variable uses the base type's channel.

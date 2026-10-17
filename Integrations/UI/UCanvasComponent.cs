@@ -36,11 +36,7 @@ namespace UnscriptedEngine.UI
             staging.gameObject.SetActive(false);
             foreach (WidgetLayer layer in Enum.GetValues(typeof(WidgetLayer)))
                 layers.Add(layer, CreateRect(layer.ToString(), transform));
-            RegisterInput<PlayerMoveInputEvent>();
-            RegisterInput<PlayerLookInputEvent>();
-            RegisterInput<PlayerSprintInputEvent>();
-            RegisterInput<PlayerJumpInputEvent>();
-            RegisterInput<PlayerInteractInputEvent>();
+            RegisterInput<PlayerActionInputEvent>();
         }
 
         public void RegisterInput<T>() where T : PlayerInputEvent

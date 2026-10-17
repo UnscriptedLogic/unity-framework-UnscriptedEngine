@@ -41,7 +41,7 @@ Override `Layer` and `InputPolicy` for custom defaults. Use `HandleInput` for be
 
 `AttachWidget(prefab, initialize)` calls `OnAttached`, then the optional initialization callback, then activates the instance. Configure per-instance layer and policy in that callback, before canvas chooses the layer parent and refreshes focus.
 
-Canvas registers these input event types automatically: `PlayerMoveInputEvent`, `PlayerLookInputEvent`, `PlayerSprintInputEvent`, `PlayerJumpInputEvent`, and `PlayerInteractInputEvent`. Register each custom event type explicitly; EventBus subscriptions use exact event types.
+Canvas registers `PlayerActionInputEvent` automatically, so widgets can receive any action published by `PlayerController` without adding another event class. `RegisterInput<T>()` remains available for other exact EventBus event types; EventBus subscriptions use exact event types.
 
 ```csharp
 using UnscriptedEngine;
