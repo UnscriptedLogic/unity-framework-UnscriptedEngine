@@ -50,16 +50,18 @@ namespace Framework.TickSystem
             if (!HasValidData())
             {
                 LogInvalidTickerData();
-                IsTicking = false;
+                StopTicker();
                 return;
             }
 
             IsTicking = true;
+            if (isActiveAndEnabled) UnscriptedEngine.UpdateManager.RegisterUpdate(this, ManagedUpdate);
         }
 
         public void StopTicker(bool resetElapsedTime = false)
         {
             IsTicking = false;
+            UnscriptedEngine.UpdateManager.UnregisterUpdate(this);
 
             if (resetElapsedTime)
             {
@@ -81,9 +83,13 @@ namespace Framework.TickSystem
             {
                 StartTicker();
             }
+            else if (IsTicking)
+            {
+                UnscriptedEngine.UpdateManager.RegisterUpdate(this, ManagedUpdate);
+            }
         }
 
-        private void Update()
+        private void ManagedUpdate(float deltaTime)
         {
             if (!IsTicking)
             {
@@ -94,13 +100,14 @@ namespace Framework.TickSystem
             {
                 LogInvalidTickerData();
                 IsTicking = false;
+                UnscriptedEngine.UpdateManager.UnregisterUpdate(this);
                 return;
             }
 
             float tickInterval = TickInterval;
-            elapsedTime += useUnscaledTime ? Time.unscaledDeltaTime : Time.deltaTime;
+            elapsedTime += useUnscaledTime ? Time.unscaledDeltaTime : deltaTime;
 
-            while (elapsedTime >= tickInterval)
+            while (this != null && isActiveAndEnabled && IsTicking && elapsedTime >= tickInterval)
             {
                 elapsedTime -= tickInterval;
                 EmitTick();
@@ -109,11 +116,13 @@ namespace Framework.TickSystem
 
         private void OnDisable()
         {
+            UnscriptedEngine.UpdateManager.UnregisterUpdate(this);
             TickSubSystem.UnregisterTicker(this);
         }
 
         private void OnDestroy()
         {
+            UnscriptedEngine.UpdateManager.UnregisterUpdate(this);
             TickSubSystem.UnregisterTicker(this);
             Ticked = null;
         }

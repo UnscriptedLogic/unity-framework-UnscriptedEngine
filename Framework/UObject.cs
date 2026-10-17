@@ -7,6 +7,11 @@ namespace UnscriptedEngine
     public abstract class UObject : NetworkBehaviour
     {
         public event Action<UObject> BeganPlay;
+        public event Action<UObject> EndedPlay;
+        private bool endingPlay;
+        private bool spawnReady;
+        private bool updateRegistrationActive;
+        private uint updateGeneration;
 
         public bool HasBegunPlay { get; private set; }
 
@@ -14,7 +19,7 @@ namespace UnscriptedEngine
 
         protected UGameState GameState { get; private set; }
 
-        protected virtual bool CanTick => HasBegunPlay;
+        protected virtual bool CanTick => IsSpawned && HasBegunPlay;
 
         protected virtual void Awake()
         {
@@ -23,6 +28,7 @@ namespace UnscriptedEngine
 
         protected virtual void OnEnable()
         {
+            RegisterForUpdates();
             UGameState.GameStateInitialized += HandleGameStateInitialized;
             TryBeginPlayFromInitializedGameState();
         }
@@ -32,38 +38,115 @@ namespace UnscriptedEngine
             TryBeginPlayFromInitializedGameState();
         }
 
-        public override void OnNetworkSpawn()
+        public sealed override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
+            OnSpawned();
+            spawnReady = true;
+            RegisterForUpdates();
             TryBeginPlayFromInitializedGameState();
         }
 
-        protected virtual void Update()
+        public sealed override void OnNetworkDespawn()
         {
-            if (CanTick)
+            spawnReady = false;
+            UnregisterFromUpdates();
+            try { OnDespawned(); }
+            finally
             {
-                Tick(Time.deltaTime);
+                try { EndPlayInternal(); }
+                finally { base.OnNetworkDespawn(); }
             }
         }
 
-        protected virtual void FixedUpdate()
+        protected virtual void OnSpawned() { }
+        protected virtual void OnDespawned() { }
+        protected virtual void OnDestroyed() { }
+        protected virtual void EndPlay() { }
+
+        private void EndPlayInternal()
         {
-            if (CanTick)
+            if (!HasBegunPlay) return;
+            UnregisterFromUpdates();
+            HasBegunPlay = false;
+            endingPlay = true;
+            try
             {
-                FixedTick(Time.fixedDeltaTime);
+                try { EndPlay(); }
+                finally { EventBus.Notify(EndedPlay, this); }
+            }
+            finally
+            {
+                GameMode = null;
+                GameState = null;
+                endingPlay = false;
+            }
+        }
+
+        private void DispatchUpdate(float deltaTime)
+        {
+            if (updateRegistrationActive && CanTick)
+            {
+                uint generation = updateGeneration;
+                Tick(deltaTime);
+                if (generation == updateGeneration && updateRegistrationActive && CanTick && IsSpawned && IsServer) ServerTick(deltaTime);
+                if (generation == updateGeneration && updateRegistrationActive && CanTick && IsSpawned && IsClient) ClientTick(deltaTime);
+            }
+        }
+
+        private void DispatchFixedUpdate(float fixedDeltaTime)
+        {
+            if (updateRegistrationActive && CanTick)
+            {
+                uint generation = updateGeneration;
+                FixedTick(fixedDeltaTime);
+                if (generation == updateGeneration && updateRegistrationActive && CanTick && IsSpawned && IsServer) ServerFixedTick(fixedDeltaTime);
+                if (generation == updateGeneration && updateRegistrationActive && CanTick && IsSpawned && IsClient) ClientFixedTick(fixedDeltaTime);
             }
         }
 
         protected virtual void OnDisable()
         {
+            UnregisterFromUpdates();
             UGameState.GameStateInitialized -= HandleGameStateInitialized;
         }
 
-        public override void OnDestroy()
+        public sealed override void OnDestroy()
         {
+            spawnReady = false;
+            UnregisterFromUpdates();
             UGameState.GameStateInitialized -= HandleGameStateInitialized;
-            base.OnDestroy();
+            try { OnDestroyed(); }
+            finally
+            {
+                try { EndPlayInternal(); }
+                finally { base.OnDestroy(); }
+            }
         }
+
+        private void UnregisterFromUpdates()
+        {
+            updateRegistrationActive = false;
+            unchecked { updateGeneration++; }
+            UpdateManager.Unregister(this);
+        }
+
+        protected virtual int TickOrder => 0;
+
+        private void RegisterForUpdates()
+        {
+            if (!isActiveAndEnabled) return;
+            updateRegistrationActive = true;
+            UpdateManager.RegisterUpdate(this, DispatchUpdate, TickOrder);
+            UpdateManager.RegisterFixedUpdate(this, DispatchFixedUpdate, TickOrder);
+        }
+
+        /// <summary>Authority work on servers and hosts, after the shared Tick.</summary>
+        protected virtual void ServerTick(float deltaTime) { }
+        /// <summary>Presentation/prediction on clients and hosts. Check IsOwner for local-player work.</summary>
+        protected virtual void ClientTick(float deltaTime) { }
+        protected virtual void ServerFixedTick(float fixedDeltaTime) { }
+        protected virtual void ClientFixedTick(float fixedDeltaTime) { }
 
         protected virtual void BeginPlay()
         {
@@ -105,7 +188,7 @@ namespace UnscriptedEngine
 
         private void BeginPlayInternal(UGameState gameState)
         {
-            if (HasBegunPlay || gameState == null || !IsSpawned)
+            if (!spawnReady || endingPlay || HasBegunPlay || gameState == null || !IsSpawned || !isActiveAndEnabled)
             {
                 return;
             }
@@ -126,7 +209,8 @@ namespace UnscriptedEngine
             }
 
             BeginPlay();
-            BeganPlay?.Invoke(this);
+            RegisterForUpdates();
+            EventBus.Notify(BeganPlay, this);
         }
     }
 }

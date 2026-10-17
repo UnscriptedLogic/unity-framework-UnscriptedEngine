@@ -1,0 +1,8 @@
+{
+    "name": "UnscriptedEngine.Tests.Support",
+    "references": ["UnscriptedEngine", "Unity.Netcode.Runtime"],
+    "includePlatforms": [],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+    "optionalUnityReferences": ["TestAssemblies"]
+}

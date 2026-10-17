@@ -20,6 +20,7 @@ namespace UnscriptedEngine
         private NetworkVariable<Vector3> _direction = new NetworkVariable<Vector3>(Vector2.zero, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
         
         private ObjectPool<GameObject> _explosionEffectPool;
+        private readonly System.Collections.Generic.List<GameObject> spawnedEffects = new();
         private NetworkManager _networkManager;
 
         protected override void BeginPlay()
@@ -31,6 +32,7 @@ namespace UnscriptedEngine
             _explosionEffectPool = new ObjectPool<GameObject>(() =>
             {
                 GameObject obj = Instantiate(explosionEffectPrefab);
+                spawnedEffects.Add(obj);
                 obj.SetActive(false);
                 return obj;
             }, obj =>
@@ -45,6 +47,17 @@ namespace UnscriptedEngine
             }, false, 10, 20);
             
             
+        }
+
+        protected override void EndPlay()
+        {
+            _explosionEffectPool?.Dispose();
+            _explosionEffectPool = null;
+            foreach (var effect in spawnedEffects)
+                if (effect != null) Destroy(effect);
+            spawnedEffects.Clear();
+            _networkManager = null;
+            base.EndPlay();
         }
 
         public void DoKnockback()

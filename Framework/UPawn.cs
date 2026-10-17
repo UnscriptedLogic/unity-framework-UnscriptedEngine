@@ -14,17 +14,17 @@ namespace UnscriptedEngine
 
         public bool IsPossessed => Controller != null;
 
-        public override void OnNetworkSpawn()
+        protected override void OnSpawned()
         {
-            base.OnNetworkSpawn();
+            base.OnSpawned();
             controllerReference.OnValueChanged += HandleControllerReferenceChanged;
             ApplyControllerReference(controllerReference.Value);
         }
 
-        public override void OnNetworkDespawn()
+        protected override void OnDespawned()
         {
             controllerReference.OnValueChanged -= HandleControllerReferenceChanged;
-            base.OnNetworkDespawn();
+            base.OnDespawned();
         }
 
         public virtual void DetachFromController()
@@ -35,10 +35,10 @@ namespace UnscriptedEngine
             }
         }
 
-        public override void OnDestroy()
+        protected override void OnDestroyed()
         {
             DetachFromController();
-            base.OnDestroy();
+            base.OnDestroyed();
         }
 
         protected virtual void OnPossessed(UController newController)

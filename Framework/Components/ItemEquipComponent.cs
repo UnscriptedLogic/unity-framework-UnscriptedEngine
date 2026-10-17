@@ -54,11 +54,25 @@ public class ItemEquipComponent : UObjectComponent
         base.OnDisable();
     }
 
-    public override void OnDestroy()
+    protected override void OnDestroyed()
     {
         StopObservingInventory();
         ClearHeldVisual();
-        base.OnDestroy();
+        base.OnDestroyed();
+    }
+
+    protected override void BeginPlay()
+    {
+        base.BeginPlay();
+        ObserveInventory();
+        RefreshHeldItem();
+    }
+
+    protected override void EndPlay()
+    {
+        StopObservingInventory();
+        ClearHeldVisual();
+        base.EndPlay();
     }
 
     public void SetInventory(IInventory newInventory)

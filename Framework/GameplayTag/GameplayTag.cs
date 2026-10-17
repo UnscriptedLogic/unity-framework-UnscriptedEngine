@@ -10,6 +10,9 @@ namespace Framework.GameplayTag
         [SerializeField, TextArea] private string description;
         [SerializeField] private GameplayTag parent;
 
+        // Changes to any authored tag invalidate dependent database/container caches.
+        internal static ulong Revision { get; private set; }
+
         public string Path => path;
         public string Description => description;
         public GameplayTag Parent => parent;
@@ -19,7 +22,7 @@ namespace Framework.GameplayTag
 
         public bool IsChildOf(GameplayTag possibleParent)
         {
-            if (possibleParent == null || possibleParent == this)
+            if (possibleParent == null || !IsValid || !possibleParent.IsValid || possibleParent.Id == Id)
             {
                 return false;
             }
@@ -29,7 +32,7 @@ namespace Framework.GameplayTag
             GameplayTag current = parent;
             for (int depth = 0; current != null && depth < 1024; depth++, current = current.parent)
             {
-                if (current == possibleParent)
+                if (current.IsValid && current.Id == possibleParent.Id)
                 {
                     return true;
                 }
@@ -45,13 +48,17 @@ namespace Framework.GameplayTag
                 return false;
             }
 
-            return this == query || (includeChildren && IsChildOf(query));
+            return Id == query.Id || (includeChildren && IsChildOf(query));
         }
 
         private void OnValidate()
         {
             path = GameplayTagPath.Normalize(path);
+            unchecked { Revision++; }
         }
+
+        private void OnEnable() { unchecked { Revision++; } }
+        private void OnDestroy() { unchecked { Revision++; } }
 
         public override string ToString() => path ?? string.Empty;
     }

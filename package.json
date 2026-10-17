@@ -1,6 +1,6 @@
 {
     "name": "com.unscriptedlogic.unscriptedengine",
-    "version": "0.1.6",
+    "version": "0.2.0",
     "displayName": "UnscriptedEngine",
     "description": "A Unity framework heavily inspired by Unreal Engine's workflow. It's partially intrusive nature aims to help developers leverage on the structured workflow of Unreal Engine and the open endedness of Unity",
     "unity": "2023.2",
@@ -10,7 +10,12 @@
     "licensesUrl": "",
     "dependencies": {
         "com.unity.netcode.gameobjects": "2.13.1",
-        "com.unity.cinemachine": "3.1.7"
+        "com.unity.cinemachine": "3.1.7",
+        "com.unity.modules.physics": "1.0.0",
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.ai": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0"
     },
     "keywords": [
         "UnscriptedLogic",
@@ -21,5 +26,12 @@
         "name": "Nathaniel 'UnscriptedLogic' Alcala",
         "email": "nhalcala@Gmail.com",
         "url": "https://tinyurl.com/nat-dev"
-    }
+    },
+    "samples": [
+        {
+            "path": "Samples~/Controls",
+            "description": "Connect a reusable lever or valve to a gauge without project scripts.",
+            "displayName": "Control Binding"
+        }
+    ]
 }

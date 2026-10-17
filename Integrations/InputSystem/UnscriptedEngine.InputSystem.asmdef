@@ -1,0 +1,7 @@
+{
+  "name": "UnscriptedEngine.InputSystem",
+  "references": ["UnscriptedEngine", "Unity.InputSystem"],
+  "defineConstraints": ["UNSCRIPTED_INPUT_SYSTEM"],
+  "versionDefines": [{"name":"com.unity.inputsystem","expression":"1.0.0","define":"UNSCRIPTED_INPUT_SYSTEM"}],
+  "autoReferenced": true
+}

@@ -1,3 +1,37 @@
+# V0.2.0
+
+- Breaking: UObject/UObjectComponent now own sealed OnNetworkSpawn, OnNetworkDespawn and OnDestroy entry points. Derived classes use OnSpawned, OnDespawned and OnDestroyed hooks instead. Existing framework and project consumers have been migrated.
+- BeginPlay/EndPlay now pair per network spawn; disable/enable pauses without restarting gameplay. Owner shutdown ends component gameplay, and destruction is an idempotent fallback.
+- Reset server game-state readiness and connected players on every spawn; wait for state initialization before starting game mode.
+- Add PublishNotification/Notify APIs that log individual subscriber failures and continue delivery. Inventory uses these post-commit notifications. Regular Publish retains exception and cancellation semantics.
+
+- Gate gameplay ticks on network spawn state and reset the game-state notification guard on despawn.
+- Invalidate stale pending player registrations when detaching a network manager.
+- Use tag IDs consistently for matching and removal; invalidate cached tag lookups when authored tags change.
+- Preserve inventory contents on repeated Initialize calls and reject reentrant mutations during change notifications.
+
+- Reset framework singletons and static event subscriptions on each play session, supporting disabled domain reload with scene reload enabled.
+- Preserve game mode/state initialization subscribers when an instance is destroyed within the same session. Subscribers must unsubscribe when their own lifetime ends.
+- Add an Editor regression test covering successive Play Mode sessions without domain reload.
+- Keep scene reload enabled. Disabling both reloads is not supported by this change. Custom static state in game code still needs its own session reset; subscribe during Awake/OnEnable or later, not only in static constructors.
+
+### Central gameplay update dispatch
+- Added a persistent, domain-reload-safe UpdateManager with mutation-safe frame/fixed subscriptions and explicit execution order.
+- Migrated UObject, UObjectComponent, Ticker, and NavMeshMovementComponent to managed callbacks.
+- Kept shared Tick/FixedTick; added server/client hooks. Hosts run both roles, dedicated servers only server, clients only client.
+- Replaced component owner-readiness polling with lifecycle notifications and RefreshOwner.
+- Added dispatcher and network-role regression coverage. See Tests/README.md for migration contracts and validation limits.
+
+### Reusable project components
+- Extracted controls, inventory views, settings storage, motion presentation, camera/look handling, movement steering and equipment selection behind project compatibility adapters.
+- Added shared modal input/cursor leases, semantic input contracts and isolated Input System sessions.
+- Removed unused core assembly references; UI and Input System integrations have independent assembly boundaries. Added an opt-in control-binding sample.
+- Added focused regression tests. Source compilation passed; clean-consumer Unity test execution was blocked by missing batch Editor license.
+
+### Regression test quality
+- Validate observable lifecycle, dispatch order, serialization compatibility, persistence, and notification behavior with independent expectations.
+- Cover failed settings writes/replacements without losing saved data; strengthen client-only routing, modal cursor, and control animation coverage.
+
 # V0.1.6
 
 - added local-only button interaction UnityEvent support

@@ -41,6 +41,13 @@ namespace UnscriptedEngine
 
         public static UGameState Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSessionState()
+        {
+            Instance = null;
+            GameStateInitialized = null;
+        }
+
         private readonly NetworkVariable<bool> frameworkInitialized =
             new NetworkVariable<bool>(
                 false,
@@ -50,8 +57,9 @@ namespace UnscriptedEngine
         private readonly NetworkList<ConnectedPlayerState> connectedPlayers = new();
 
         private bool hasRaisedGameStateInitialized;
+        public bool IsNetworkReady { get; private set; }
 
-        public bool IsFrameworkInitialized => IsSpawned && frameworkInitialized.Value;
+        public bool IsFrameworkInitialized => IsSpawned && IsNetworkReady && frameworkInitialized.Value;
 
         public NetworkList<ConnectedPlayerState> ConnectedPlayers => connectedPlayers;
 
@@ -71,7 +79,14 @@ namespace UnscriptedEngine
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
+            hasRaisedGameStateInitialized = false;
+            if (IsServer)
+            {
+                frameworkInitialized.Value = false;
+                connectedPlayers.Clear();
+            }
             frameworkInitialized.OnValueChanged += HandleFrameworkInitializedChanged;
+            IsNetworkReady = true;
 
             if (frameworkInitialized.Value)
             {
@@ -82,6 +97,8 @@ namespace UnscriptedEngine
         public override void OnNetworkDespawn()
         {
             frameworkInitialized.OnValueChanged -= HandleFrameworkInitializedChanged;
+            IsNetworkReady = false;
+            hasRaisedGameStateInitialized = false;
             base.OnNetworkDespawn();
         }
 
@@ -90,7 +107,7 @@ namespace UnscriptedEngine
             if (Instance == this)
             {
                 Instance = null;
-                GameStateInitialized = null;
+                // Subscribers own their subscriptions for the rest of this session.
             }
 
             base.OnDestroy();
@@ -104,6 +121,7 @@ namespace UnscriptedEngine
 
         public bool SetFrameworkInitialized()
         {
+            if (!IsSpawned || !IsNetworkReady) return false;
             if (!IsServer)
             {
                 Debug.LogWarning($"Only the server can initialize {nameof(UGameState)}.");

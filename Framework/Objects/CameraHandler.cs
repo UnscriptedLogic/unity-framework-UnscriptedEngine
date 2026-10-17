@@ -15,6 +15,12 @@ namespace UnscriptedEngine
 
         public static CameraHandler Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSessionState()
+        {
+            Instance = null;
+        }
+
         public CameraMagnetComponent ActiveMagnet { get; private set; }
 
         public Transform ActiveTarget => ActiveMagnet != null ? ActiveMagnet.TargetTransform : null;

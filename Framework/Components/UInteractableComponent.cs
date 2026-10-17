@@ -59,21 +59,21 @@ namespace UnscriptedEngine
         protected override bool CanTick => !IsSpawned || IsServer;
         private bool CanRunAuthoritativeLogic => !IsSpawned || IsServer;
 
-        public override void OnNetworkSpawn()
+        protected override void OnSpawned()
         {
-            base.OnNetworkSpawn();
+            base.OnSpawned();
             snapshot.OnValueChanged += HandleSnapshotChanged;
             if (IsServer) PublishSnapshot();
             NotifyProgress(Progress01);
         }
 
-        public override void OnNetworkDespawn()
+        protected override void OnDespawned()
         {
             if (IsServer) InterruptAuthoritative();
             snapshot.OnValueChanged -= HandleSnapshotChanged;
             process.Reset();
             activeSource = null;
-            base.OnNetworkDespawn();
+            base.OnDespawned();
         }
 
         protected override void OnDisable()

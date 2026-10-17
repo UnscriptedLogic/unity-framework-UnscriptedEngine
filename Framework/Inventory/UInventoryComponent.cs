@@ -11,6 +11,7 @@ namespace UnscriptedEngine
         private int inventorySize = 10;
         private Dictionary<int, InventorySlot> slots;
         private bool loggingEnabled = true;
+        private bool publishingChanges;
 
         public int InventorySize => inventorySize;
         public event Action Changed;
@@ -24,6 +25,7 @@ namespace UnscriptedEngine
 
         public void Initialize()
         {
+            if (slots != null) return;
             slots = new Dictionary<int, InventorySlot>();
             Items = new ReadOnlyDictionary<int, InventorySlot>(slots);
             PublishChanged();
@@ -32,6 +34,7 @@ namespace UnscriptedEngine
         // Adds the entire quantity or leaves the inventory unchanged.
         public OperationResult TryAddItem(ItemDataSO itemDataSo, int quantity = 1)
         {
+            if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = PlanAddItem(itemDataSo, quantity, out var additions);
             if (result.Success)
             {
@@ -42,17 +45,19 @@ namespace UnscriptedEngine
                 }
 
                 result.Message = "Item added successfully";
-                PublishChanged();
-                foreach (var addition in additions)
+                PublishChanged(() =>
                 {
-                    EventBus.Publish(new EB_InventoryAddedItem
+                    foreach (var addition in additions)
                     {
-                        Inventory = this,
-                        ItemAdded = itemDataSo,
-                        SlotIndex = addition.Key,
-                        Quantity = addition.Value
-                    });
-                }
+                        EventBus.PublishNotification(new EB_InventoryAddedItem
+                        {
+                            Inventory = this,
+                            ItemAdded = itemDataSo,
+                            SlotIndex = addition.Key,
+                            Quantity = addition.Value
+                        });
+                    }
+                });
             }
 
             Log(result.Message);
@@ -107,6 +112,7 @@ namespace UnscriptedEngine
         // Removing the final item frees the slot. The default removes one item.
         public OperationResult TryRemoveItem(int slotIndex, int quantity = 1)
         {
+            if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = ValidateOccupiedSlot(slotIndex, quantity);
             if (!result.Success) return result;
 
@@ -124,6 +130,7 @@ namespace UnscriptedEngine
         // SlotIndex in the result identifies the newly created stack.
         public OperationResult TrySplitStack(int sourceSlotIndex, int quantity)
         {
+            if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = ValidateOccupiedSlot(sourceSlotIndex, quantity);
             if (!result.Success) return result;
 
@@ -200,10 +207,19 @@ namespace UnscriptedEngine
             return false;
         }
 
-        private void PublishChanged()
+        private void PublishChanged(Action afterChanged = null)
         {
-            Changed?.Invoke();
-            EventBus.Publish(new EB_InventoryChanged { Inventory = this });
+            publishingChanges = true;
+            try
+            {
+                EventBus.Notify(Changed);
+                EventBus.PublishNotification(new EB_InventoryChanged { Inventory = this });
+                afterChanged?.Invoke();
+            }
+            finally
+            {
+                publishingChanges = false;
+            }
         }
 
         private static OperationResult Failure(string message, int slotIndex = -1)

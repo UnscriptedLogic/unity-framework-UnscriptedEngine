@@ -12,6 +12,13 @@ namespace UnscriptedEngine
 
         public static UGameMode Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSessionState()
+        {
+            Instance = null;
+            GameModeInitialized = null;
+        }
+
         public bool IsInitialized { get; private set; }
 
         [SerializeField] private UPawn defaultPawnPrefab;
@@ -21,6 +28,7 @@ namespace UnscriptedEngine
         private readonly Dictionary<ulong, NetworkObject> spawnedDefaultPawns = new();
 
         private Coroutine initializationCoroutine;
+        private uint registrationGeneration;
 
         protected NetworkManager networkManager;
         protected UGameState gameState;
@@ -157,7 +165,7 @@ namespace UnscriptedEngine
                 return false;
             }
 
-            if (!gameState.IsSpawned)
+            if (!gameState.IsSpawned || !gameState.IsNetworkReady)
             {
                 return false;
             }
@@ -202,6 +210,8 @@ namespace UnscriptedEngine
 
         private void UnregisterNetworkManager()
         {
+            unchecked { registrationGeneration++; }
+            pendingPlayerRegistrations.Clear();
             if (networkManager == null)
             {
                 return;
@@ -324,7 +334,7 @@ namespace UnscriptedEngine
             if (Instance == this)
             {
                 Instance = null;
-                GameModeInitialized = null;
+                // Subscribers own their subscriptions for the rest of this session.
             }
 
             IsInitialized = false;
@@ -337,18 +347,19 @@ namespace UnscriptedEngine
                 return;
             }
 
-            StartCoroutine(RegisterConnectedClientWhenPlayerObjectReady(clientId));
+            StartCoroutine(RegisterConnectedClientWhenPlayerObjectReady(clientId, registrationGeneration));
         }
 
-        private IEnumerator RegisterConnectedClientWhenPlayerObjectReady(ulong clientId)
+        private IEnumerator RegisterConnectedClientWhenPlayerObjectReady(ulong clientId, uint generation)
         {
-            while (networkManager != null
+            while (generation == registrationGeneration && networkManager != null
                    && networkManager.ConnectedClients.TryGetValue(clientId, out NetworkClient client)
                    && (client.PlayerObject == null || !client.PlayerObject.IsSpawned))
             {
                 yield return null;
             }
 
+            if (generation != registrationGeneration) yield break;
             pendingPlayerRegistrations.Remove(clientId);
 
             if (networkManager != null && networkManager.ConnectedClients.ContainsKey(clientId))

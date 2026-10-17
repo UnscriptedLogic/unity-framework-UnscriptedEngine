@@ -15,17 +15,17 @@ namespace UnscriptedEngine
 
         public bool HasPawn => Pawn != null;
 
-        public override void OnNetworkSpawn()
+        protected override void OnSpawned()
         {
-            base.OnNetworkSpawn();
+            base.OnSpawned();
             possessedPawnReference.OnValueChanged += HandlePossessedPawnReferenceChanged;
             ApplyPossessedPawnReference(possessedPawnReference.Value);
         }
 
-        public override void OnNetworkDespawn()
+        protected override void OnDespawned()
         {
             possessedPawnReference.OnValueChanged -= HandlePossessedPawnReferenceChanged;
-            base.OnNetworkDespawn();
+            base.OnDespawned();
         }
 
         public virtual bool Possess(UPawn pawn)
@@ -90,14 +90,14 @@ namespace UnscriptedEngine
             SetPawnFromPossession(null);
         }
 
-        public override void OnDestroy()
+        protected override void OnDestroyed()
         {
             if (IsServer)
             {
                 UnPossess();
             }
 
-            base.OnDestroy();
+            base.OnDestroyed();
         }
 
         protected virtual void OnPossess(UPawn pawn)

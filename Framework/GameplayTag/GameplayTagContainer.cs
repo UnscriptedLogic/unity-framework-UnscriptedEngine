@@ -11,6 +11,7 @@ namespace Framework.GameplayTag
 
         [NonSerialized] private HashSet<ulong> expandedIds;
         [NonSerialized] private HashSet<ulong> exactIds;
+        [NonSerialized] private ulong cachedRevision;
 
         public IReadOnlyList<GameplayTag> Tags => tags;
         public int Count => tags.Count;
@@ -29,10 +30,14 @@ namespace Framework.GameplayTag
 
         public bool Remove(GameplayTag tag)
         {
-            if (tag == null || !tags.Remove(tag))
+            if (tag == null || !tag.IsValid)
             {
                 return false;
             }
+
+            int index = tags.FindIndex(existing => existing != null && existing.Id == tag.Id);
+            if (index < 0) return false;
+            tags.RemoveAt(index);
 
             RebuildRuntimeSets();
             return true;
@@ -106,7 +111,7 @@ namespace Framework.GameplayTag
 
         private void EnsureRuntimeSets()
         {
-            if (expandedIds == null || exactIds == null)
+            if (expandedIds == null || exactIds == null || cachedRevision != GameplayTag.Revision)
             {
                 RebuildRuntimeSets();
             }
@@ -116,6 +121,7 @@ namespace Framework.GameplayTag
         {
             expandedIds = new HashSet<ulong>();
             exactIds = new HashSet<ulong>();
+            cachedRevision = GameplayTag.Revision;
 
             for (int i = tags.Count - 1; i >= 0; i--)
             {

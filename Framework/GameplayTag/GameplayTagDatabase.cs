@@ -9,6 +9,7 @@ namespace Framework.GameplayTag
         [SerializeField] private List<GameplayTag> tags = new();
 
         private Dictionary<string, GameplayTag> lookup;
+        private ulong cachedRevision;
 
         public IReadOnlyList<GameplayTag> Tags => tags;
 
@@ -20,12 +21,13 @@ namespace Framework.GameplayTag
 
         private void BuildLookup()
         {
-            if (lookup != null)
+            if (lookup != null && cachedRevision == GameplayTag.Revision)
             {
                 return;
             }
 
             lookup = new Dictionary<string, GameplayTag>(System.StringComparer.Ordinal);
+            cachedRevision = GameplayTag.Revision;
 
             for (int i = 0; i < tags.Count; i++)
             {

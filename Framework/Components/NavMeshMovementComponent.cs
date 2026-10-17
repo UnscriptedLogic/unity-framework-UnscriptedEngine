@@ -32,7 +32,11 @@ namespace UnscriptedEngine
             agent.enabled = false;
         }
 
-        private void FixedUpdate()
+        private void OnEnable() => UpdateManager.RegisterFixedUpdate(this, ManagedFixedUpdate, -40);
+
+        private void OnDestroy() => UpdateManager.UnregisterFixedUpdate(this);
+
+        private void ManagedFixedUpdate(float deltaTime)
         {
             if (!CanNavigate)
             {
@@ -150,6 +154,7 @@ namespace UnscriptedEngine
 
         private void OnDisable()
         {
+            UpdateManager.UnregisterFixedUpdate(this);
             Stop();
             if (agent != null)
                 agent.enabled = false;

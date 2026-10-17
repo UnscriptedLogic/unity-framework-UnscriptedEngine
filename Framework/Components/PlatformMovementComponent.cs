@@ -55,9 +55,9 @@ namespace UnscriptedEngine
             clientInterpolationSpeed = Mathf.Max(0f, clientInterpolationSpeed);
         }
 
-        public override void OnNetworkSpawn()
+        protected override void OnSpawned()
         {
-            base.OnNetworkSpawn();
+            base.OnSpawned();
 
             ResolvePathPositions();
 
@@ -75,9 +75,9 @@ namespace UnscriptedEngine
             }
         }
 
-        protected override void FixedTick(float fixedDeltaTime)
+        protected override void ServerFixedTick(float fixedDeltaTime)
         {
-            if (!IsServer || !isMoving || moveSpeed <= 0f)
+            if (!isMoving || moveSpeed <= 0f)
             {
                 return;
             }
@@ -120,7 +120,7 @@ namespace UnscriptedEngine
             }
         }
 
-        protected override void Tick(float deltaTime)
+        protected override void ClientTick(float deltaTime)
         {
             if (IsServer)
             {

@@ -12,6 +12,14 @@ namespace UnscriptedEngine
 
         public static UGameInstance Instance { get; private set; }
 
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSessionState()
+        {
+            Instance = null;
+            GameInstanceInitialized = null;
+            GameInstanceShuttingDown = null;
+        }
+
         public bool IsInitialized { get; private set; }
 
         protected virtual void Awake()

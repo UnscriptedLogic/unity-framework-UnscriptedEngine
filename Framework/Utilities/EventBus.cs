@@ -17,6 +17,14 @@ namespace UnscriptedEngine
         private static readonly Dictionary<Type, List<ListenerEntry>> _listeners = new();
         private static long _nextSubscriptionOrder;
 
+        // Subscriptions belong to one play session, including managed and static callbacks.
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSessionState()
+        {
+            _listeners.Clear();
+            _nextSubscriptionOrder = 0;
+        }
+
         // Register a method to listen for an event
         public static void Subscribe<T>(Action<T> listener, int priority = 0)
         {
@@ -153,6 +161,39 @@ namespace UnscriptedEngine
             }
 
             return true;
+        }
+
+        /// <summary>Deliver a post-commit notification to every subscriber, logging failures individually.</summary>
+        public static void Notify<T>(Action<T> subscribers, T value)
+        {
+            if (subscribers == null) return;
+            foreach (Action<T> subscriber in subscribers.GetInvocationList())
+            {
+                if (IsDeadUnityObject(subscriber.Target)) continue;
+                try { subscriber(value); }
+                catch (Exception exception) { Debug.LogException(exception); }
+            }
+        }
+
+        public static void Notify(Action subscribers)
+        {
+            if (subscribers == null) return;
+            foreach (Action subscriber in subscribers.GetInvocationList())
+            {
+                if (IsDeadUnityObject(subscriber.Target)) continue;
+                try { subscriber(); }
+                catch (Exception exception) { Debug.LogException(exception); }
+            }
+        }
+
+        public static void PublishNotification<T>(T eventData)
+        {
+            if (eventData is ICancellableEvent)
+                throw new ArgumentException("Cancellable events must use Publish.", nameof(eventData));
+            if (!_listeners.TryGetValue(typeof(T), out var listeners)) return;
+            RemoveDeadListeners(typeof(T), listeners);
+            foreach (var listener in listeners.ToArray())
+                Notify((Action<T>)listener.Callback, eventData);
         }
 
         private static void RemoveDeadListeners(Type type, List<ListenerEntry> listeners)

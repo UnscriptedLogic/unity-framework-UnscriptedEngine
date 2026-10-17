@@ -9,6 +9,7 @@ namespace UnscriptedEngine
     [DefaultExecutionOrder(-50)]
     public class CharacterMovementComponent : UObjectComponent
     {
+        protected override int TickOrder => -50;
         public struct CharacterMoveInput : INetworkSerializeByMemcpy, IEquatable<CharacterMoveInput>
         {
             public int Tick;
@@ -298,9 +299,9 @@ namespace UnscriptedEngine
             }
         }
 
-        public override void OnNetworkSpawn()
+        protected override void OnSpawned()
         {
-            base.OnNetworkSpawn();
+            base.OnSpawned();
             ResetPredictionState();
             authoritativeState.OnValueChanged += HandleAuthoritativeStateChanged;
 
@@ -314,10 +315,10 @@ namespace UnscriptedEngine
             }
         }
 
-        public override void OnNetworkDespawn()
+        protected override void OnDespawned()
         {
             authoritativeState.OnValueChanged -= HandleAuthoritativeStateChanged;
-            base.OnNetworkDespawn();
+            base.OnDespawned();
         }
 
         protected override void FixedTick(float fixedDeltaTime)

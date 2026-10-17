@@ -13,6 +13,7 @@ namespace UnscriptedEngine
         [SerializeField] private bool onlyOwnerCanPull = true;
 
         private CameraHandler cameraHandler;
+        private bool resumePull;
 
         public bool IsPullingCamera { get; private set; }
 
@@ -119,20 +120,37 @@ namespace UnscriptedEngine
 
         protected override void OnDisable()
         {
+            resumePull = IsPullingCamera;
             ReleaseCamera();
             base.OnDisable();
         }
 
-        public override void OnNetworkDespawn()
+        protected override void EndPlay()
         {
+            resumePull = false;
             ReleaseCamera();
-            base.OnNetworkDespawn();
+            base.EndPlay();
         }
 
-        public override void OnDestroy()
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            if (!resumePull || !HasBegunPlay) return;
+            resumePull = false;
+            PullCamera();
+        }
+
+        protected override void OnDespawned()
+        {
+            resumePull = false;
+            ReleaseCamera();
+            base.OnDespawned();
+        }
+
+        protected override void OnDestroyed()
         {
             ReleaseCamera();
-            base.OnDestroy();
+            base.OnDestroyed();
         }
 
         private bool CanPullCamera()
