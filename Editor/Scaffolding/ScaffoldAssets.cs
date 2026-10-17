@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Unity.Netcode;
@@ -16,9 +15,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
     {
         public static bool Build(ScaffoldPlan plan)
         {
-            foreach (string path in plan.OutputPaths().Where(path => !path.EndsWith(".cs")))
-                if (File.Exists(path) || File.Exists(path + ".meta"))
-                    throw new IOException("Output already exists: " + path);
+            if (!plan.ConfirmConflicts(plan.OutputPaths().Where(path => !path.EndsWith(".cs")))) return false;
             UPlayerDefinition definition = null;
             if (!string.IsNullOrEmpty(plan.playerDefinitionPath))
             {
@@ -31,25 +28,26 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 target = SceneManager.GetSceneByPath(plan.targetScenePath);
                 ValidateSceneTarget(target);
             }
-            if (plan.scene && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return false;
+            if (plan.scene && !plan.ShouldSkip(plan.PathFor("S", "unity"))
+                && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return false;
             plan.EnsureOutputFolders();
 
-            var created = new List<string>();
+            using var files = new ScaffoldFileTransaction();
             Undo.IncrementCurrentGroup();
             int undoGroup = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Generate UnscriptedEngine assets");
             try
             {
-                if (plan.scene) BuildScene(plan, definition, created);
-                else BuildPlayer(plan, target, created);
+                if (plan.scene) BuildScene(plan, definition, files);
+                else BuildPlayer(plan, target, files);
                 AssetDatabase.SaveAssets();
+                files.Commit();
                 Undo.CollapseUndoOperations(undoGroup);
                 return true;
             }
             catch
             {
                 Undo.RevertAllDownToGroup(undoGroup);
-                for (int i = created.Count - 1; i >= 0; i--) AssetDatabase.DeleteAsset(created[i]);
                 throw;
             }
         }
@@ -88,7 +86,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
             catch { Object.DestroyImmediate(root); throw; }
         }
 
-        private static void BuildPlayer(ScaffoldPlan plan, Scene target, List<string> created)
+        private static void BuildPlayer(ScaffoldPlan plan, Scene target, ScaffoldFileTransaction files)
         {
             GameObject controller = null, pawn = null;
             Scene preview = EditorSceneManager.NewPreviewScene();
@@ -99,16 +97,17 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 SceneManager.MoveGameObjectToScene(controller, preview);
                 SceneManager.MoveGameObjectToScene(pawn, preview);
                 ScaffoldGeneration.CreateTemplate(plan.templateType).Configure(controller, pawn);
-                var controllerPrefab = SavePrefab(controller, plan.PathFor("C", "prefab"), created);
-                var pawnPrefab = SavePrefab(pawn, plan.PathFor("P", "prefab"), created);
+                var controllerPrefab = SavePrefab(plan, controller, plan.PathFor("C", "prefab"), files);
+                var pawnPrefab = SavePrefab(plan, pawn, plan.PathFor("P", "prefab"), files);
                 var definition = ScriptableObject.CreateInstance<UPlayerDefinition>();
                 definition.controllerPrefab = controllerPrefab.GetComponent<UController>();
                 definition.pawnPrefab = pawnPrefab.GetComponent<UPawn>();
                 ValidateDefinition(definition);
-                CreateAsset(definition, plan.PathFor("PD", "asset"), created);
+                definition = SaveAsset(plan, definition, plan.PathFor("PD", "asset"), files);
+                ValidateDefinition(definition);
                 if (target.IsValid())
                     WirePlayer(Find<UGameMode>(target).Single(), Find<NetworkManager>(target).Single(), definition,
-                        plan.PathFor("NP", "asset"), created);
+                        plan, files);
                 Selection.activeObject = definition;
             }
             finally
@@ -119,25 +118,58 @@ namespace UnscriptedEngine.Editor.Scaffolding
             }
         }
 
-        private static GameObject SavePrefab(GameObject root, string path, List<string> created)
+        private static GameObject SavePrefab(ScaffoldPlan plan, GameObject root, string path, ScaffoldFileTransaction files)
         {
-            created.Add(path);
+            if (plan.ShouldSkip(path)) return LoadExisting<GameObject>(path);
+            files.Capture(plan, path);
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);
             if (prefab == null) throw new IOException("Failed to save prefab: " + path);
             return prefab;
         }
 
-        private static void CreateAsset(Object asset, string path, List<string> created)
+        private static T LoadExisting<T>(string path) where T : Object
         {
-            created.Add(path);
-            AssetDatabase.CreateAsset(asset, path);
+            var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+            if (asset == null) throw new IOException("Existing output is missing or incompatible: " + path);
+            return asset;
         }
 
-        private static void BuildScene(ScaffoldPlan plan, UPlayerDefinition definition, List<string> created)
+        private static T SaveAsset<T>(ScaffoldPlan plan, T asset, string path, ScaffoldFileTransaction files) where T : ScriptableObject
         {
-            Scene previous = SceneManager.GetActiveScene();
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            try
+            {
+                if (plan.ShouldSkip(path)) return LoadExisting<T>(path);
+                files.Capture(plan, path);
+                if (File.Exists(path))
+                {
+                    var existing = LoadExisting<T>(path);
+                    EditorUtility.CopySerialized(asset, existing);
+                    EditorUtility.SetDirty(existing);
+                    return existing;
+                }
+                AssetDatabase.CreateAsset(asset, path);
+                return asset;
+            }
+            finally { if (!EditorUtility.IsPersistent(asset)) Object.DestroyImmediate(asset); }
+        }
+
+        private static void BuildScene(ScaffoldPlan plan, UPlayerDefinition definition, ScaffoldFileTransaction files)
+        {
             string path = plan.PathFor("S", "unity");
+            if (plan.ShouldSkip(path))
+            {
+                LoadExisting<SceneAsset>(path);
+                SaveNetworkList(plan, definition, files);
+                return;
+            }
+            files.Capture(plan, path);
+            Scene previous = SceneManager.GetActiveScene();
+            Scene existingScene = SceneManager.GetSceneByPath(path);
+            bool wasLoaded = existingScene.IsValid() && existingScene.isLoaded;
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            SceneManager.SetActiveScene(scene);
+            if (wasLoaded) EditorSceneManager.CloseScene(existingScene, true);
+            bool saved = false;
             try
             {
                 SceneManager.SetActiveScene(scene);
@@ -148,40 +180,53 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 manager.NetworkConfig = new NetworkConfig();
                 manager.NetworkConfig.NetworkTransport = manager.gameObject.AddComponent<UnityTransport>();
                 manager.NetworkConfig.EnableSceneManagement = true;
-                if (definition != null) WirePlayer(mode, manager, definition, plan.PathFor("NP", "asset"), created);
+                if (definition != null) WirePlayer(mode, manager, definition, plan, files);
                 else
                 {
-                    var list = ScriptableObject.CreateInstance<NetworkPrefabsList>();
-                    CreateAsset(list, plan.PathFor("NP", "asset"), created);
+                    var list = SaveNetworkList(plan, null, files);
                     manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(list);
                 }
-                created.Add(path);
                 if (!EditorSceneManager.SaveScene(scene, path)) throw new IOException("Failed to save scene: " + path);
+                saved = true;
+            }
+            catch
+            {
+                files.Dispose();
+                throw;
             }
             finally
             {
+                if (wasLoaded && !saved) EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
                 EditorSceneManager.CloseScene(scene, true);
                 if (previous.IsValid() && previous.isLoaded) SceneManager.SetActiveScene(previous);
             }
             EditorSceneManager.OpenScene(path, OpenSceneMode.Single);
         }
 
+        private static NetworkPrefabsList SaveNetworkList(ScaffoldPlan plan, UPlayerDefinition definition, ScaffoldFileTransaction files)
+        {
+            var list = ScriptableObject.CreateInstance<NetworkPrefabsList>();
+            if (definition != null)
+                foreach (GameObject prefab in new[] { definition.controllerPrefab.gameObject, definition.pawnPrefab.gameObject })
+                    list.Add(new NetworkPrefab { Prefab = prefab });
+            return SaveAsset(plan, list, plan.PathFor("NP", "asset"), files);
+        }
+
         private static void WirePlayer(UGameMode mode, NetworkManager manager, UPlayerDefinition definition,
-            string listPath, List<string> created)
+            ScaffoldPlan plan, ScaffoldFileTransaction files)
         {
             ValidateDefinition(definition);
-            var list = ScriptableObject.CreateInstance<NetworkPrefabsList>();
-            // A dedicated list avoids mutating shared lists used by other scenes.
-            foreach (GameObject prefab in new[] { definition.controllerPrefab.gameObject, definition.pawnPrefab.gameObject })
-                if (!manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Any(existing => existing != null && existing.Contains(prefab)))
-                    list.Add(new NetworkPrefab { Prefab = prefab });
-            CreateAsset(list, listPath, created);
+            var list = SaveNetworkList(plan, definition, files);
+            if (!list.Contains(definition.pawnPrefab.gameObject)
+                && !manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Any(existing => existing != null && existing.Contains(definition.pawnPrefab.gameObject)))
+                throw new InvalidOperationException("Skipped network prefab list does not register the selected pawn. Register it manually or choose Replace.");
             Undo.RecordObjects(new Object[] { mode, manager }, "Assign generated player pair");
             var serialized = new SerializedObject(mode);
             serialized.FindProperty("defaultPawnPrefab").objectReferenceValue = definition.pawnPrefab;
             serialized.ApplyModifiedProperties();
             manager.NetworkConfig.PlayerPrefab = definition.controllerPrefab.gameObject;
-            manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(list);
+            if (!manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Contains(list))
+                manager.NetworkConfig.Prefabs.NetworkPrefabsLists.Add(list);
             PrefabUtility.RecordPrefabInstancePropertyModifications(mode);
             PrefabUtility.RecordPrefabInstancePropertyModifications(manager);
             EditorUtility.SetDirty(manager);

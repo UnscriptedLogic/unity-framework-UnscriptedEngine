@@ -4,7 +4,8 @@ namespace UnscriptedEngine.Editor.Scaffolding
 {
     /// <summary>
     /// Implement in an Editor assembly with a public parameterless constructor to add a preset.
-    /// Bodies go inside generated UController/UPawn subclasses. Use fully qualified type names.
+    /// Bodies go inside generated UController/UPawn subclasses with using UnscriptedEngine.
+    /// Use fully qualified names for types from other namespaces.
     /// Configure adds camera, movement, input, and other preset-specific prefab components.
     /// </summary>
     public interface IPlayerScaffoldTemplate

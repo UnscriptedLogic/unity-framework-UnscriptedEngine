@@ -16,11 +16,32 @@ namespace UnscriptedEngine.Editor.Scaffolding
         public string templateType;
         public string playerDefinitionPath;
         public string targetScenePath;
+        public string[] skippedPaths = Array.Empty<string>();
+        public string[] replacedPaths = Array.Empty<string>();
+
+        public bool ShouldSkip(string path) => skippedPaths != null && skippedPaths.Contains(path);
+        public bool ShouldReplace(string path) => replacedPaths != null && replacedPaths.Contains(path);
+
+        public bool ConfirmConflicts(IEnumerable<string> paths)
+        {
+            string[] conflicts = paths.Where(path => !ShouldSkip(path) && !ShouldReplace(path)
+                && (File.Exists(path) || File.Exists(path + ".meta"))).ToArray();
+            if (conflicts.Length == 0) return true;
+            int choice = EditorUtility.DisplayDialogComplex("Existing scaffold files",
+                "These output files already exist:\n\n" + string.Join("\n", conflicts)
+                + "\n\nSkip keeps existing files and reuses them where needed. Replace overwrites these files, including custom code and scene contents. Missing files are generated in either case.",
+                "Skip Existing", "Cancel", "Replace Existing");
+            if (choice == 1) return false;
+            if (choice == 0) skippedPaths = (skippedPaths ?? Array.Empty<string>()).Concat(conflicts).ToArray();
+            else replacedPaths = (replacedPaths ?? Array.Empty<string>()).Concat(conflicts).ToArray();
+            return true;
+        }
 
         public string PathFor(string prefix, string extension)
         {
             string outputFolder = extension == "cs" ? folder + "/Scripts"
-                : extension == "unity" ? folder + "/Scenes" : folder;
+                : extension == "unity" ? folder + "/Scenes"
+                : extension == "prefab" ? folder + "/Prefabs" : folder;
             return $"{outputFolder}/{prefix}_{name}.{extension}";
         }
 
@@ -65,15 +86,19 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 || part.Equals("Resources", StringComparison.OrdinalIgnoreCase)))
                 throw new ArgumentException("Choose a runtime folder outside Editor and Resources.");
             foreach (string path in OutputPaths())
-                if (File.Exists(path) || File.Exists(path + ".meta") || Directory.Exists(path))
-                    throw new IOException("Output already exists: " + path);
+                if (Directory.Exists(path))
+                    throw new IOException("A folder occupies an output file path: " + path);
             foreach (string prefix in Prefixes)
             {
                 string className = prefix + "_" + name;
-                if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetType(className) != null)
+                string expectedPath = PathFor(prefix, "cs");
+                var existingScript = AssetDatabase.LoadAssetAtPath<MonoScript>(expectedPath);
+                if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetType(className) != null
+                        && (existingScript == null || assembly.GetType(className) != existingScript.GetClass()))
                     || AssetDatabase.FindAssets(className + " t:MonoScript").Any(guid =>
-                        System.IO.Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)) == className))
-                    throw new ArgumentException("Script name already exists: " + className);
+                        System.IO.Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)) == className
+                        && !string.Equals(AssetDatabase.GUIDToAssetPath(guid), expectedPath, StringComparison.OrdinalIgnoreCase)))
+                    throw new ArgumentException("Script name already exists outside the target output: " + className);
             }
         }
     }

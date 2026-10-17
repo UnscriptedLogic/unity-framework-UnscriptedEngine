@@ -3,8 +3,9 @@
 Use **Tools > UnscriptedEngine > Create Controller and Pawn...** to enter a name,
 choose an existing folder under `Assets`, and select a template. The blank template
 creates `Scripts/C_Name.cs`, `Scripts/P_Name.cs`, matching networked prefabs, and `PD_Name.asset`.
-Scripts go in a `Scripts` subfolder and scenes in a `Scenes` subfolder of the selected
-output folder. Missing subfolders are created automatically; existing ones are reused.
+Scripts go in a `Scripts` subfolder, scenes in a `Scenes` subfolder, and player prefabs
+in a `Prefabs` subfolder of the selected output folder. Missing subfolders are created
+automatically; existing ones are reused.
 The player definition stores the two prefab references together. Runtime possession
 is still performed by `UGameMode`; the prefabs are separate network objects.
 
@@ -33,10 +34,16 @@ creates scene/prefab assets. Pending work survives script domain reloads during 
 current Editor session. If compilation fails, fix Console errors and click **Finish
 Pending Generation** in either window. **Cancel Pending Generation** clears the job
 but retains source files; it never removes scripts you may have edited. Restarting the
-Editor clears the pending session job. If cancelled, remove or rename the retained
-scripts before generating that name again.
+Editor clears the pending session job. If cancelled, generate the same name again
+and choose whether to skip or replace the retained files.
 
-Existing outputs and conflicting script names are rejected. Select a runtime folder
+Existing outputs trigger a shared **Skip Existing / Replace Existing / Cancel** prompt.
+The choice applies to all listed conflicts. Skip retains their contents and reuses existing
+prefabs and definitions where needed; missing outputs are still generated. A skipped scene
+is not rebuilt or opened. Replace overwrites listed outputs, including custom source code
+and scene contents, while retaining asset GUIDs. Replacement is not covered by scene Undo.
+Conflicting script names outside the exact target script paths are still rejected.
+Select a runtime folder
 outside `Editor` and `Resources`. If the folder belongs to a custom assembly definition,
 that assembly must reference `UnscriptedEngine` and `Unity.Netcode.Runtime`. Generated
 classes use the global namespace. File names and class names use `PREFIX_Name`.
@@ -52,7 +59,8 @@ window discovers implementations through `TypeCache`.
 
 - `DisplayName` labels the preset.
 - `ControllerBody` and `PawnBody` supply code inside generated subclasses. Use fully
-  qualified types and the framework's inherited lifecycle hooks.
+  qualified types for other namespaces; generated scripts include `using UnscriptedEngine;`.
+  Use the framework's inherited lifecycle hooks.
 - `Configure(controller, pawn)` attaches and wires components before prefabs are saved.
   Operate only on the supplied roots and their children. Keep NetworkObjects and generated
   controller/pawn components at the roots. Do not create external assets in this hook.

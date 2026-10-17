@@ -59,13 +59,34 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
-        public void ExistingPrefabPreventsAnySourceGeneration()
+        public void ExistingPrefabIsAllowedForConflictResolutionWithoutChangingContent()
         {
             var plan = Plan();
+            plan.EnsureOutputFolders();
             File.WriteAllText(plan.PathFor("P", "prefab"), "Existing asset");
-            Assert.Throws<IOException>(() => plan.Validate());
+            Assert.DoesNotThrow(() => plan.Validate());
             Assert.False(File.Exists(plan.PathFor("C", "cs")));
             Assert.AreEqual("Existing asset", File.ReadAllText(plan.PathFor("P", "prefab")));
+        }
+
+        [Test]
+        public void ConflictDecisionsSurviveCompilationHandoff()
+        {
+            var plan = Plan();
+            plan.skippedPaths = new[] { plan.PathFor("C", "cs") };
+            plan.replacedPaths = new[] { plan.PathFor("P", "prefab") };
+            var restored = JsonUtility.FromJson<ScaffoldPlan>(JsonUtility.ToJson(plan));
+            Assert.True(restored.ShouldSkip(plan.PathFor("C", "cs")));
+            Assert.True(restored.ShouldReplace(plan.PathFor("P", "prefab")));
+            Assert.False(restored.ShouldReplace(plan.PathFor("PD", "asset")));
+        }
+
+        [Test]
+        public void DirectoryAtOutputFilePathCannotBeReplaced()
+        {
+            var plan = Plan();
+            Directory.CreateDirectory(plan.PathFor("P", "prefab"));
+            Assert.Throws<IOException>(() => plan.Validate());
         }
 
         [Test]
@@ -81,7 +102,7 @@ namespace UnscriptedEngine.Tests
         {
             var plan = Plan("Arena");
             CollectionAssert.Contains(plan.OutputPaths(), folder + "/PD_Arena.asset");
-            CollectionAssert.Contains(plan.OutputPaths(), folder + "/C_Arena.prefab");
+            CollectionAssert.Contains(plan.OutputPaths(), folder + "/Prefabs/C_Arena.prefab");
             plan.scene = true;
             CollectionAssert.Contains(plan.OutputPaths(), folder + "/Scripts/GM_Arena.cs");
             CollectionAssert.Contains(plan.OutputPaths(), folder + "/Scripts/NM_Arena.cs");
