@@ -1,0 +1,8 @@
+{
+  "name": "UnscriptedEngine.UI.Editor",
+  "references": ["UnscriptedEngine", "UnscriptedEngine.Editor", "UnscriptedEngine.UI", "UnityEngine.UI"],
+  "includePlatforms": ["Editor"],
+  "defineConstraints": ["UNSCRIPTED_UGUI"],
+  "versionDefines": [{"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"}],
+  "autoReferenced": true
+}

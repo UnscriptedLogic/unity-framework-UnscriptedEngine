@@ -1,6 +1,6 @@
 {
   "name": "UnscriptedEngine.UI.Tests",
-  "references": ["UnscriptedEngine", "UnscriptedEngine.UI", "Unity.Netcode.Runtime", "UnityEngine.UI", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "references": ["UnscriptedEngine", "UnscriptedEngine.Editor", "UnscriptedEngine.UI", "UnscriptedEngine.UI.Editor", "Unity.Netcode.Runtime", "UnityEngine.UI", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
   "includePlatforms": ["Editor"],
   "overrideReferences": true,
   "precompiledReferences": ["nunit.framework.dll"],

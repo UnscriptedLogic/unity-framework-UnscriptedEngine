@@ -97,6 +97,22 @@ namespace UnscriptedEngine.Tests
             finally { UnityEngine.Object.DestroyImmediate(definition); }
         }
 
+        [TestCase(UIScaffoldKind.Canvas, "Scripts/UI", "Prefabs/UI", "UC")]
+        [TestCase(UIScaffoldKind.Widget, "Scripts/UI/Widgets", "Prefabs/UI/Components", "UW")]
+        public void UIFoldersAreCreatedRecursivelyAndReused(UIScaffoldKind kind, string scripts, string prefabs, string prefix)
+        {
+            var plan = Plan("Menu");
+            plan.ui = kind;
+            plan.EnsureOutputFolders();
+            Assert.True(AssetDatabase.IsValidFolder(folder + "/" + scripts));
+            Assert.True(AssetDatabase.IsValidFolder(folder + "/" + prefabs));
+            string guid = AssetDatabase.AssetPathToGUID(folder + "/" + prefabs);
+            plan.EnsureOutputFolders();
+            Assert.AreEqual(guid, AssetDatabase.AssetPathToGUID(folder + "/" + prefabs));
+            CollectionAssert.AreEquivalent(new[] { folder + "/" + scripts + "/" + prefix + "_Menu.cs",
+                folder + "/" + prefabs + "/" + prefix + "_Menu.prefab" }, plan.OutputPaths());
+        }
+
         [Test]
         public void SceneNamesAndPlayerNamesUsePrefixDivider()
         {

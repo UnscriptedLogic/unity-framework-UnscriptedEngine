@@ -8,7 +8,7 @@ namespace UnscriptedEngine.UI
 {
     /// <summary>Local-player widget ownership, ordering, focus and cancellable input routing.</summary>
     [RequireComponent(typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster))]
-    public sealed class UCanvasComponent : MonoBehaviour
+    public class UCanvasComponent : MonoBehaviour
     {
         public const int InputPriority = 1000;
         private readonly List<UWidgetComponent> widgets = new();
@@ -30,7 +30,7 @@ namespace UnscriptedEngine.UI
             OwningController = controller;
         }
 
-        private void Awake()
+        protected virtual void Awake()
         {
             staging = CreateRect("Inactive staging", transform);
             staging.gameObject.SetActive(false);
@@ -195,20 +195,20 @@ namespace UnscriptedEngine.UI
             if (eventSystem != null) eventSystem.SetSelectedGameObject(focused != null ? focused.Selection : null);
         }
 
-        private void OnEnable()
+        protected virtual void OnEnable()
         {
             // Awake can register while enabled; unsubscribe first to keep one listener per type.
             foreach (var bind in subscriptions.Values) { bind(false); bind(true); }
             RefreshWidgets();
         }
 
-        private void OnDisable()
+        protected virtual void OnDisable()
         {
             foreach (var bind in subscriptions.Values) bind(false);
             RefreshWidgets();
         }
 
-        private void OnDestroy()
+        protected virtual void OnDestroy()
         {
             destroying = true;
             foreach (var bind in subscriptions.Values) bind(false);

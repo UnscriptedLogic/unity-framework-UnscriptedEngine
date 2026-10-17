@@ -12,6 +12,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         [SerializeField] private DefaultAsset folder;
         private Vector2 scroll;
         protected abstract bool GeneratesScene { get; }
+        protected virtual string Heading => GeneratesScene ? "Scene setup" : "Controller and pawn";
 
         protected virtual void OnEnable()
         {
@@ -22,7 +23,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         protected virtual void OnGUI()
         {
             scroll = EditorGUILayout.BeginScrollView(scroll);
-            EditorGUILayout.LabelField(GeneratesScene ? "Scene setup" : "Controller and pawn", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField(Heading, EditorStyles.boldLabel);
             scaffoldName = EditorGUILayout.TextField("Name", scaffoldName);
             folder = (DefaultAsset)EditorGUILayout.ObjectField("Output folder", folder, typeof(DefaultAsset), false);
             if (GUILayout.Button("Browse folder..."))

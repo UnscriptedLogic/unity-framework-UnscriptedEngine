@@ -7,12 +7,15 @@ using UnityEditor;
 
 namespace UnscriptedEngine.Editor.Scaffolding
 {
+    public enum UIScaffoldKind { None, Canvas, Widget }
+
     [Serializable]
     public sealed class ScaffoldPlan
     {
         public string name;
         public string folder;
         public bool scene;
+        public UIScaffoldKind ui;
         public string templateType;
         public string playerDefinitionPath;
         public string targetScenePath;
@@ -39,6 +42,13 @@ namespace UnscriptedEngine.Editor.Scaffolding
 
         public string PathFor(string prefix, string extension)
         {
+            if (ui != UIScaffoldKind.None)
+            {
+                string uiFolder = extension == "cs"
+                    ? "/Scripts/UI" + (ui == UIScaffoldKind.Widget ? "/Widgets" : "")
+                    : "/Prefabs/UI" + (ui == UIScaffoldKind.Widget ? "/Components" : "");
+                return $"{folder}{uiFolder}/{prefix}_{name}.{extension}";
+            }
             string outputFolder = extension == "cs" ? folder + "/Scripts"
                 : extension == "unity" ? folder + "/Scenes"
                 : extension == "prefab" ? folder + "/Prefabs" : folder;
@@ -49,17 +59,33 @@ namespace UnscriptedEngine.Editor.Scaffolding
         {
             foreach (string outputFolder in OutputPaths().Select(path => path.Substring(0, path.LastIndexOf('/'))).Distinct())
             {
-                if (AssetDatabase.IsValidFolder(outputFolder)) continue;
-                if (File.Exists(outputFolder) || Directory.Exists(outputFolder)
-                    || string.IsNullOrEmpty(AssetDatabase.CreateFolder(folder, System.IO.Path.GetFileName(outputFolder))))
-                    throw new IOException("Cannot create output folder: " + outputFolder);
+                EnsureFolder(outputFolder);
             }
         }
-        public string[] Prefixes => scene ? new[] { "GM", "GI", "GS", "NM" } : new[] { "C", "P" };
+
+        private static void EnsureFolder(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+            if (File.Exists(path) || Directory.Exists(path)) throw new IOException("Cannot create output folder: " + path);
+            int divider = path.LastIndexOf('/');
+            if (divider < 0) throw new IOException("Invalid output folder: " + path);
+            string parent = path.Substring(0, divider);
+            EnsureFolder(parent);
+            if (string.IsNullOrEmpty(AssetDatabase.CreateFolder(parent, path.Substring(divider + 1))))
+                throw new IOException("Cannot create output folder: " + path);
+        }
+
+        public string[] Prefixes => ui != UIScaffoldKind.None ? new[] { ui == UIScaffoldKind.Canvas ? "UC" : "UW" }
+            : scene ? new[] { "GM", "GI", "GS", "NM" } : new[] { "C", "P" };
 
         public IEnumerable<string> OutputPaths()
         {
             foreach (string prefix in Prefixes) yield return PathFor(prefix, "cs");
+            if (ui != UIScaffoldKind.None)
+            {
+                yield return PathFor(Prefixes[0], "prefab");
+                yield break;
+            }
             if (scene)
             {
                 yield return PathFor("S", "unity");

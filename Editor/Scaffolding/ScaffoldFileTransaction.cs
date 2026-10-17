@@ -6,7 +6,7 @@ using UnityEditor;
 namespace UnscriptedEngine.Editor.Scaffolding
 {
     /// <summary>Restore overwritten content and metadata if an asset-generation attempt fails.</summary>
-    internal sealed class ScaffoldFileTransaction : IDisposable
+    public sealed class ScaffoldFileTransaction : IDisposable
     {
         private readonly Dictionary<string, byte[]> originals = new Dictionary<string, byte[]>();
         private bool committed;
