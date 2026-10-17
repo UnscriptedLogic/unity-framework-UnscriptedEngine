@@ -1,0 +1,10 @@
+{
+  "name": "UnscriptedEngine.UI.Tests",
+  "references": ["UnscriptedEngine", "UnscriptedEngine.UI", "Unity.Netcode.Runtime", "UnityEngine.UI", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "UNSCRIPTED_UGUI"],
+  "versionDefines": [{"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"}]
+}

@@ -1,6 +1,6 @@
 {
   "name": "UnscriptedEngine.UI",
-  "references": ["UnscriptedEngine", "Unity.TextMeshPro"],
+  "references": ["UnscriptedEngine", "Unity.TextMeshPro", "UnityEngine.UI", "Unity.Netcode.Runtime"],
   "defineConstraints": ["UNSCRIPTED_UGUI"],
   "versionDefines": [{"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"}],
   "autoReferenced": true

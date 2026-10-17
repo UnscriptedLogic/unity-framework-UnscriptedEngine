@@ -1,3 +1,10 @@
+# Unreleased
+
+- Add typed setting definitions, nested groups, reference-counted scene modules, validated runtime values, subscriptions, and local JSON preferences.
+- Add generated uGUI settings with search, advanced filtering, collapsible groups, prefab themes, and custom widget hooks.
+- Add optional server-authoritative Netcode settings synchronization and client read-only enforcement.
+- Document setup, typed catalogs, prototype additions, customization, persistence, networking, and limitations in Framework/Settings/README.md.
+
 # V0.2.1
 
 - Add modular Editor generators for framework scenes and linked controller/pawn prefabs, with optional scene wiring and extensible player templates.

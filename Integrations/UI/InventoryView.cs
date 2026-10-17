@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnscriptedEngine;
 
-public class InventoryView : MonoBehaviour
+public class InventoryView : UWidgetComponent
 {
     [SerializeField] private GameObject slotPrefab;
     [SerializeField] private Transform gridContainer;
@@ -21,15 +21,17 @@ public class InventoryView : MonoBehaviour
         BuildGrid();
     }
 
-    protected virtual void OnEnable()
+    protected override void OnEnable()
     {
+        base.OnEnable();
         if (_inventory != null) { _inventory.Changed -= RefreshSlots; _inventory.Changed += RefreshSlots; }
         RefreshSlots();
     }
 
-    protected virtual void OnDisable()
+    protected override void OnDisable()
     {
         if (_inventory != null) _inventory.Changed -= RefreshSlots;
+        base.OnDisable();
     }
 
     private void BuildGrid()
