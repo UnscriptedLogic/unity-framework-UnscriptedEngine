@@ -1,77 +1,79 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 namespace UnscriptedEngine.UI
 {
-    public enum WidgetLayer { HUD, Screen, Modal, Overlay }
-    public enum WidgetInputPolicy { Passive, HandleOnly, Modal }
-
+    /// <summary>A reusable control. Messages and unhandled input bubble to its owning screen.</summary>
     [RequireComponent(typeof(RectTransform), typeof(CanvasGroup))]
-    public class UWidgetComponent : MonoBehaviour
+    public class UWidgetComponent : MonoBehaviour, ISelectHandler
     {
-        [SerializeField] private WidgetLayer layer = WidgetLayer.Screen;
-        [SerializeField] private WidgetInputPolicy inputPolicy = WidgetInputPolicy.HandleOnly;
-        [SerializeField] private GameObject defaultSelection;
-
-        public UCanvasComponent Canvas { get; internal set; }
-        public UController OwningController => Canvas != null ? Canvas.OwningController : null;
-        public virtual WidgetLayer Layer => layer;
-        public virtual WidgetInputPolicy InputPolicy => inputPolicy;
+        [SerializeField] private bool focusable = true;
+        [SerializeField] private int tabOrder;
+        [SerializeField] private Selectable selectionTarget;
+        [SerializeField] private bool navigationGroup;
+        public UCanvasComponent OwnerCanvas { get; private set; }
+        public UController OwningController => OwnerCanvas != null ? OwnerCanvas.OwningController : null;
+        public virtual bool Focusable => focusable;
+        public int TabOrder => tabOrder;
+        public bool NavigationGroup => navigationGroup;
         public bool IsFocused { get; private set; }
-        internal GameObject LastSelection;
-        internal GameObject Selection
+        public Selectable SelectionTarget => selectionTarget != null ? selectionTarget : GetComponentInChildren<Selectable>();
+        public bool CanFocus => isActiveAndEnabled && Focusable && SelectionTarget != null &&
+            SelectionTarget.IsActive() && SelectionTarget.IsInteractable();
+        public UWidgetComponent ParentWidget
         {
             get
             {
-                if (LastSelection != null && LastSelection.activeInHierarchy) return LastSelection;
-                if (defaultSelection != null && defaultSelection.activeInHierarchy) return defaultSelection;
-                foreach (var selectable in GetComponentsInChildren<UnityEngine.UI.Selectable>())
-                    if (selectable.IsActive() && selectable.IsInteractable()) return selectable.gameObject;
+                for (var parent = transform.parent; parent != null; parent = parent.parent)
+                {
+                    if (parent.GetComponent<UCanvasComponent>() != null) break;
+                    var widget = parent.GetComponent<UWidgetComponent>();
+                    if (widget != null) return widget;
+                }
                 return null;
             }
         }
 
-        public void Close()
+        public void RefreshOwner()
         {
-            if (Canvas != null) Canvas.DetachWidget(this);
-            else Destroy(gameObject);
+            var owner = GetComponentInParent<UCanvasComponent>();
+            if (!isActiveAndEnabled) owner = null;
+            if (owner == OwnerCanvas) return;
+            if (OwnerCanvas != null) OwnerCanvas.UnregisterWidget(this);
+            OwnerCanvas = owner;
+            if (OwnerCanvas != null) OwnerCanvas.RegisterWidget(this);
         }
 
-        public void Show() => gameObject.SetActive(true);
-        public void Hide() => gameObject.SetActive(false);
+        public bool RequestFocus() => OwnerCanvas != null && OwnerCanvas.FocusWidget(this);
+        public void OnSelect(BaseEventData eventData) { if (OwnerCanvas != null) OwnerCanvas.SyncSelection(); }
         public virtual bool HandleInput(PlayerInputEvent input) => false;
-        protected virtual void OnAttached() { }
-        protected virtual void OnDetached() { }
-        protected virtual void OnShown() { }
-        protected virtual void OnHidden() { }
+        protected virtual bool HandleMessage<T>(UWidgetComponent source, T message) => false;
+        public bool Raise<T>(T message)
+        {
+            for (var parent = ParentWidget; parent != null; parent = parent.ParentWidget)
+                if (parent.HandleMessage(this, message)) return true;
+            return OwnerCanvas != null && OwnerCanvas.ReceiveMessage(this, message);
+        }
+        internal void SetFocused(bool value)
+        {
+            if (IsFocused == value) return;
+            IsFocused = value;
+            if (value) OnFocusGained(); else OnFocusLost();
+        }
         protected virtual void OnFocusGained() { }
         protected virtual void OnFocusLost() { }
-
-        internal void Attach() => OnAttached();
-        internal void Detach() => OnDetached();
-        internal void SetFocused(bool focused)
-        {
-            if (IsFocused == focused) return;
-            IsFocused = focused;
-            if (focused) OnFocusGained(); else OnFocusLost();
-        }
-
-        protected virtual void OnEnable()
-        {
-            if (Canvas == null) return;
-            Canvas.RefreshWidgets();
-            OnShown();
-        }
-
-        protected virtual void OnDisable()
-        {
-            if (Canvas == null) return;
-            Canvas.RefreshWidgets();
-            OnHidden();
-        }
-
+        protected virtual void OnEnable() => RefreshOwner();
+        protected virtual void OnDisable() => RefreshOwner();
         protected virtual void OnDestroy()
         {
-            if (Canvas != null) Canvas.ForgetWidget(this);
+            if (OwnerCanvas != null) OwnerCanvas.UnregisterWidget(this);
+            OwnerCanvas = null;
+        }
+        protected virtual void OnTransformParentChanged()
+        {
+            // Moving a composite also changes ownership of all its descendants.
+            foreach (var widget in GetComponentsInChildren<UWidgetComponent>(true)) widget.RefreshOwner();
         }
     }
 }

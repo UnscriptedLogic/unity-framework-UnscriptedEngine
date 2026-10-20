@@ -64,26 +64,12 @@ namespace UnscriptedEngine.UI.Editor
             var rect = root.GetComponent<RectTransform>() ?? root.AddComponent<RectTransform>();
             rect.localScale = Vector3.one;
             rect.localRotation = Quaternion.identity;
-            if (kind == UIScaffoldKind.Canvas)
-            {
-                var canvas = root.GetComponent<Canvas>() ?? root.AddComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                var scaler = root.GetComponent<CanvasScaler>() ?? root.AddComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920, 1080);
-                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                scaler.matchWidthOrHeight = 0.5f;
-                if (root.GetComponent<GraphicRaycaster>() == null) root.AddComponent<GraphicRaycaster>();
-            }
-            else
-            {
-                rect.anchorMin = Vector2.zero;
-                rect.anchorMax = Vector2.one;
-                rect.pivot = new Vector2(0.5f, 0.5f);
-                rect.anchoredPosition3D = Vector3.zero;
-                rect.sizeDelta = Vector2.zero;
-                if (root.GetComponent<CanvasGroup>() == null) root.AddComponent<CanvasGroup>();
-            }
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition3D = Vector3.zero;
+            rect.sizeDelta = Vector2.zero;
+            if (root.GetComponent<CanvasGroup>() == null) root.AddComponent<CanvasGroup>();
             if (root.GetComponent(componentType) == null) root.AddComponent(componentType);
         }
     }

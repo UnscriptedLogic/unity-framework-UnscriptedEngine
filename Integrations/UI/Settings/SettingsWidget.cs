@@ -4,8 +4,14 @@ using UnscriptedEngine.Settings;
 
 namespace UnscriptedEngine.UI.Settings
 {
+    public readonly struct SettingEdited
+    {
+        public SettingEdited(SettingDefinition definition, object value) { Definition = definition; Value = value; }
+        public SettingDefinition Definition { get; }
+        public object Value { get; }
+    }
     /// <summary>Base contract for themed controls. Own only UI here; writes go through the service.</summary>
-    public abstract class SettingsWidget : MonoBehaviour
+    public abstract class SettingsWidget : UWidgetComponent
     {
         protected SettingsService Service { get; private set; }
         protected SettingDefinition Definition { get; private set; }
@@ -33,13 +39,14 @@ namespace UnscriptedEngine.UI.Settings
         {
             bool accepted = Service.TrySet(Definition, value);
             DisplayValue(Service.Get(Definition));
+            if (accepted) Raise(new SettingEdited(Definition, Service.Get(Definition)));
             return accepted;
         }
         protected abstract void OnBound();
         protected abstract void DisplayValue(object value);
         protected virtual void OnUnbound() { }
-        protected virtual void OnEnable() { if (Service != null) Subscribe(); }
-        protected virtual void OnDisable() { subscription?.Dispose(); subscription = null; }
-        protected virtual void OnDestroy() => Unbind();
+        protected override void OnEnable() { base.OnEnable(); if (Service != null) Subscribe(); }
+        protected override void OnDisable() { base.OnDisable(); subscription?.Dispose(); subscription = null; }
+        protected override void OnDestroy() { Unbind(); base.OnDestroy(); }
     }
 }

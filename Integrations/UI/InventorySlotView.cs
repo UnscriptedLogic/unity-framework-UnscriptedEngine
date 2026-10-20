@@ -3,7 +3,7 @@ using TMPro;
 using UnityEngine;
 using UnscriptedEngine;
 
-public class InventorySlotView : MonoBehaviour
+public class InventorySlotView : UWidgetComponent
 {
     [SerializeField] private TMP_Text itemNameText;
     [SerializeField] private TMP_Text rarityText;

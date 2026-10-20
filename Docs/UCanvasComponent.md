@@ -1,116 +1,84 @@
-# UCanvasComponent
+# Canvas controllers, screens, and widgets
 
-`UCanvasComponent` manages runtime `UWidgetComponent` instances for one `UController`. It owns widget ordering, focus, Unity UI selection, and routing of cancellable player input events. API lives in `UnscriptedEngine.UI`.
+All three types live in `UnscriptedEngine.UI` and are local `MonoBehaviour` components.
 
-## 🧭 Purpose and design
+- `UCanvasController` owns the Unity Canvas, ordered screen instances, modal backdrops, input subscriptions, focus leases, and action-to-screen bindings.
+- `UCanvasComponent` is one screen. It owns screen data, lifecycle, widget membership, selection, and navigation. Its source is `Integrations/UI/Screens/UCanvasComponent.cs`.
+- `UWidgetComponent` is a reusable control or composite. It registers with its nearest screen, receives focused input, and bubbles typed messages to parent widgets and the screen.
 
-Widgets share one stack owner, so each panel does not need its own input subscription, focus logic, or modal bookkeeping. The canvas chooses the top interactive widget, updates its `CanvasGroup`, and sends registered input events from top to bottom. Modal widgets also acquire a controller-scoped `InputFocus` lease.
+## Showing screens
 
-## 🚀 Getting started
-
-1. Install `com.unity.ugui` 2.0.0 or newer to enable package UI integration.
-2. Add `UCanvasComponent` to a Unity Canvas GameObject. Its required `Canvas`, `CanvasScaler`, and `GraphicRaycaster` components are added by Unity.
-3. Create a prefab with a `UWidgetComponent` on its root. `RectTransform` and `CanvasGroup` are required automatically.
-4. Add an `EventSystem` to the scene for keyboard/controller navigation and selected controls.
-5. Initialize the canvas with the controller whose input events it should handle, then attach widget prefabs.
+Create a controller only for the local player. The caller owns its lifetime and should deactivate and destroy its GameObject during teardown.
 
 ```csharp
-canvas.Initialize(localController);
-PauseMenu menu = canvas.AttachWidget(pauseMenuPrefab);
+var ui = UCanvasController.Create(localController);
+ui.BackAction = "Player/Escape";
+ui.NextWidgetAction = "UI/NextWidget";
+ui.PreviousWidgetAction = "UI/PreviousWidget";
+ui.BindToggle("Player/Tab", inventoryPrefab, screen => screen.Initialize(inventory));
+ui.BindOpen("Player/Escape", settingsPrefab);
+ui.Show(hudPrefab);
 ```
 
-The controller must be initialized before attaching widgets. Canvas does not verify that controller is local; incoming events must carry the same controller instance.
+`Show(prefab, initialize)` creates a new instance. The screen receives its controller, `OnAttached`, and initialization callback before activation. Layer and policy overrides must be configured before activation. A failed initialization removes the partial instance.
 
-## Using the stack
+`BindOpen` and `BindToggle` retain one instance per binding. Toggle closes its focused instance; a covered instance stays covered. A hidden instance is shown again. Destroyed instances are recreated. Unrelated bindings cannot open through a modal unless explicitly registered with `allowDuringModal: true`. `Bind` accepts a factory for third-party adapters; the factory must return a screen owned by that controller. `CreateCanvas<T>` creates a screen without a prefab.
 
-Layers order from lowest to highest: `HUD`, `Screen`, `Modal`, `Overlay`. Newer widgets appear above older widgets in the same layer. `BringToFront(widget)` makes a widget newest within its layer.
+Screens expose `Show`, `Hide`, and `Close`. Close detaches and destroys the instance. `BringToFront` changes ordering within its existing layer.
 
-| `WidgetInputPolicy` | Behavior |
+## Layers and input
+
+`CanvasLayer` orders HUD, Screen, Modal, then Overlay. Attachment order breaks ties. Passive overlays can render above a modal without taking focus.
+
+| CanvasInputPolicy | Behavior |
 | --- | --- |
-| `Passive` | Draws without taking focus, blocking raycasts, or receiving routed input. Useful for decorative HUD elements. |
-| `HandleOnly` | Receives input. If `HandleInput` returns `true`, canvas cancels event; otherwise routing can continue to older widgets. |
-| `Modal` | Blocks widgets below it, acquires an `InputFocus` lease, shows a raycast backdrop for the top visible modal, and consumes matching events even when `HandleInput` returns `false`. |
+| Passive | No routed input, interaction, or pointer interception |
+| HandleOnly | Handles input and passes unhandled input downward |
+| Modal | Blocks lower screens and gameplay, retaining its own focus lease |
 
-The top visible interactive widget receives focus. With `EventSystem.current`, canvas selects its last valid selection, configured default selection, or first active interactable `Selectable`. Without an EventSystem, focus callbacks still run, but Unity UI selection cannot be assigned.
+The controller subscribes to `PlayerActionInputEvent` at priority 1000. Additional concrete `PlayerInputEvent` types can be registered with `RegisterInput<T>()`. Gameplay must continue respecting `InputFocus.IsBlocked(controller)` for held input state.
 
-Use `Show()` and `Hide()` to activate or hide an attached widget. Hiding releases its focus lease but keeps it attached. `Close()` detaches and destroys it. Disabling the canvas unsubscribes its input listeners and makes attached widgets non-interactive until re-enabled.
+Input first reaches the focused widget, then parent widgets, then the screen. The controller next handles navigation, Back, and the focused screen's toggle binding. Modal boundaries consume unhandled input. Explicit global bindings run before screen routing. Open/toggle/navigation bindings react only to non-synthetic performed presses.
 
-## 🧩 Extending widgets and input
+Back closes only the top dismissible screen and consumes that press before an underlying open binding can run. Override `Dismissible` or `HandleBack` for special behavior. Covered controls become non-interactable; a full-screen backdrop blocks pointer click-through. Closing a modal restores the prior screen selection if still valid.
 
-Override `Layer` and `InputPolicy` for custom defaults. Use `HandleInput` for behavior. Lifecycle hooks include `OnAttached`, `OnDetached`, `OnShown`, `OnHidden`, `OnFocusGained`, and `OnFocusLost`.
+Use one Unity EventSystem and the appropriate UI input module. That module owns pointer events, directional navigation, and Submit for standard controls; do not also forward those actions into a second button execution path. The custom NextWidget/PreviousWidget actions only move selection. In the sample project they use F6/F7, leaving Tab as the Inventory toggle. Bindings can be changed in the input action asset.
 
-`AttachWidget(prefab, initialize)` calls `OnAttached`, then the optional initialization callback, then activates the instance. Configure per-instance layer and policy in that callback, before canvas chooses the layer parent and refreshes focus.
+## Reusable widgets
 
-Canvas registers `PlayerActionInputEvent` automatically, so widgets can receive any action published by `PlayerController` without adding another event class. `RegisterInput<T>()` remains available for other exact EventBus event types; EventBus subscriptions use exact event types.
+Put widgets under a screen in the prefab, or instantiate them beneath it at runtime. Widgets automatically register on enable and unregister on disable/destruction. Reparenting a widget or widget composite updates ownership. Call `RefreshOwner` after other hierarchy changes that do not move a widget's own transform.
+
+A widget is a navigation stop only when `Focusable` is true and its configured or discovered `Selectable` is active and interactable. `TabOrder` orders stops; equal values preserve registration order. `NavigationGroup` makes a composite one stop, excluding its child widgets from screen-level traversal. The composite can handle internal directional input itself.
 
 ```csharp
-using UnscriptedEngine;
-
-public sealed class OpenInventoryInputEvent : PlayerInputEvent
+public readonly struct ItemChosen
 {
-    public OpenInventoryInputEvent(UController controller) : base(controller) { }
+    public ItemChosen(string id) { Id = id; }
+    public string Id { get; }
 }
 
-// After canvas.Initialize(controller):
-canvas.RegisterInput<OpenInventoryInputEvent>();
-EventBus.Publish(new OpenInventoryInputEvent(controller));
-```
-
-Registered events route only when canvas is active, event is not already cancelled, and `input.Controller` matches `OwningController`. Canvas listener priority is `UCanvasComponent.InputPriority` (`1000`). Gameplay code should check `InputFocus.IsBlocked(controller)` to respect an active modal lease.
-
-## Example
-
-This modal pause widget closes on the interact event. Its input is still consumed by the modal policy.
-
-```csharp
-using UnityEngine;
-using UnscriptedEngine;
-using UnscriptedEngine.UI;
-
-public sealed class PauseMenu : UWidgetComponent
+public class ItemWidget : UWidgetComponent
 {
-    public string Title { get; private set; }
-    public void SetTitle(string value) => Title = value;
+    public void Choose(string id) => Raise(new ItemChosen(id));
+}
 
-    public override WidgetLayer Layer => WidgetLayer.Modal;
-    public override WidgetInputPolicy InputPolicy => WidgetInputPolicy.Modal;
-
-    public override bool HandleInput(PlayerInputEvent input)
+public class InventoryScreen : UCanvasComponent
+{
+    protected override bool HandleMessage<T>(UWidgetComponent source, T message)
     {
-        if (!(input is PlayerInteractInputEvent)) return false;
-        Close();
+        if (message is not ItemChosen chosen) return false;
+        // Update details using chosen.Id.
         return true;
     }
 }
-
-public sealed class PauseMenuLauncher : MonoBehaviour
-{
-    [SerializeField] private UCanvasComponent canvas;
-    [SerializeField] private PauseMenu pauseMenuPrefab;
-
-    public void Initialize(UController localController)
-    {
-        canvas.Initialize(localController);
-    }
-
-    public void Open()
-    {
-        // Configure before showing; OnShown runs after this callback.
-        PauseMenu menu = canvas.AttachWidget(pauseMenuPrefab, instance => instance.SetTitle("Paused"));
-    }
-}
 ```
 
-## ⚠️ Usage limits
+Messages bubble locally through parent widgets until handled, then reach the screen. They do not use the global EventBus. Settings widgets emit `SettingEdited` after an accepted write. Widgets can override `HandleInput`, `OnFocusGained`, and `OnFocusLost`, or call `RequestFocus`. Screen focus and widget focus synchronize with EventSystem selection.
 
-- Canvas routes only event types it registered and only for its owning controller. It does not discover or validate local-player ownership.
-- Layer determines widget parent at attachment. Changing `Layer` afterward does not move the widget to another layer container. Configure layer before attachment.
-- Policy changes are reflected when canvas next refreshes the stack. Configure policy before attachment for immediate focus and raycast state.
-- Modal focus is controller-scoped for gameplay blocking, while Unity cursor state is process-wide.
-- Widget state and stack are runtime UI state; canvas does not replicate them over the network.
+## Migration
 
-## Notes and changelog
+The former manager `UCanvasComponent` is now `UCanvasController`; the former screen `UWidgetComponent` is now `UCanvasComponent`. Their script GUIDs follow those roles. The new reusable `UWidgetComponent` has a new GUID. Existing serialized layer, policy, and default-selection fields stay on the screen base. Update custom source subclasses to the appropriate base and replace manager `AttachWidget` calls with `Show`.
 
-- Canvas creates internal layer containers and an inactive staging parent in `Awake`.
-- A throwing initialization callback cleans up the partially attached widget and rethrows the exception.
-- 2026-10-17: Added component documentation for package version 0.2.1.
+Settings, Inventory, HUD, and the console adapter use the controller. `DefaultPawnUIHandler` contains only local-player initialization, bindings, dependencies, and teardown. Generated screen and widget prefabs contain RectTransform and CanvasGroup; the controller supplies rendering and scaling. Legacy screen prefabs may retain nested Canvas components, whose sorting override is normalized when shown.
+
+Current selection uses `EventSystem.current`; cursor state is global. Separate simultaneous local-player UI selection requires a per-player EventSystem integration. UI state is not network-replicated.

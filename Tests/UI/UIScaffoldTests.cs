@@ -25,16 +25,14 @@ namespace UnscriptedEngine.Tests
         public void Cleanup() { Object.DestroyImmediate(root); }
 
         [Test]
-        public void CanvasPrefabHasScalingAndRaycastingWithDerivedComponent()
+        public void ScreenPrefabUsesControllerRenderingWithDerivedComponent()
         {
             UIScaffoldBuilder.ConfigureRoot(root, UIScaffoldKind.Canvas, typeof(ScaffoldCanvasSubclass));
             Assert.NotNull(root.GetComponent<ScaffoldCanvasSubclass>());
-            Assert.NotNull(root.GetComponent<GraphicRaycaster>());
-            Assert.AreEqual(RenderMode.ScreenSpaceOverlay, root.GetComponent<Canvas>().renderMode);
-            var scaler = root.GetComponent<CanvasScaler>();
-            Assert.AreEqual(CanvasScaler.ScaleMode.ScaleWithScreenSize, scaler.uiScaleMode);
-            Assert.AreEqual(new Vector2(1920, 1080), scaler.referenceResolution);
-            Assert.AreEqual(0.5f, scaler.matchWidthOrHeight);
+            Assert.NotNull(root.GetComponent<CanvasGroup>());
+            Assert.IsNull(root.GetComponent<Canvas>());
+            Assert.IsNull(root.GetComponent<CanvasScaler>());
+            Assert.IsNull(root.GetComponent<GraphicRaycaster>());
             Assert.AreEqual(LayerMask.NameToLayer("UI"), root.layer);
         }
 

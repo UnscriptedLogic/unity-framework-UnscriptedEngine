@@ -13,17 +13,17 @@ namespace UnscriptedEngine.Tests
     {
         public CanvasTestInput(UController controller) : base(controller) { }
     }
-    public sealed class CanvasTestWidget : UWidgetComponent
+    public sealed class CanvasTestWidget : UCanvasComponent
     {
-        public WidgetLayer TestLayer = WidgetLayer.Screen;
-        public WidgetInputPolicy Policy = WidgetInputPolicy.Modal;
+        public CanvasLayer TestLayer = CanvasLayer.Screen;
+        public CanvasInputPolicy Policy = CanvasInputPolicy.Modal;
         public Action<CanvasTestWidget> OnInput;
         public int Calls;
         public bool Initialized;
         public bool ShownAfterInitialization;
-        public override WidgetLayer Layer => TestLayer;
-        public override WidgetInputPolicy InputPolicy => Policy;
-        protected override void OnShown() => ShownAfterInitialization = Initialized && Canvas != null;
+        public override CanvasLayer Layer => TestLayer;
+        public override CanvasInputPolicy InputPolicy => Policy;
+        protected override void OnShown() => ShownAfterInitialization = Initialized && Controller != null;
         public override bool HandleInput(PlayerInputEvent input)
         {
             Calls++;
@@ -32,10 +32,10 @@ namespace UnscriptedEngine.Tests
         }
     }
 
-    public class UCanvasComponentTests
+    public class UCanvasControllerTests
     {
         private readonly List<GameObject> objects = new();
-        private UCanvasComponent canvas;
+        private UCanvasController canvas;
         private CanvasTestController controller;
         private CanvasTestWidget prefab;
 
@@ -49,7 +49,7 @@ namespace UnscriptedEngine.Tests
         [SetUp] public void Setup()
         {
             controller = Create("Controller", typeof(CanvasTestController)).GetComponent<CanvasTestController>();
-            canvas = Create("Canvas", typeof(RectTransform), typeof(UCanvasComponent)).GetComponent<UCanvasComponent>();
+            canvas = Create("Canvas", typeof(RectTransform), typeof(UCanvasController)).GetComponent<UCanvasController>();
             canvas.Initialize(controller);
             canvas.RegisterInput<CanvasTestInput>();
             prefab = Create("Prefab", typeof(RectTransform), typeof(CanvasTestWidget)).GetComponent<CanvasTestWidget>();
@@ -65,40 +65,40 @@ namespace UnscriptedEngine.Tests
 
         [Test] public void NewestModalSwallowsAndClosingDoesNotReachOlderWidget()
         {
-            var older = canvas.AttachWidget(prefab);
-            var newer = canvas.AttachWidget(prefab);
+            var older = canvas.Show(prefab);
+            var newer = canvas.Show(prefab);
             newer.OnInput = widget => UnityEngine.Object.DestroyImmediate(widget.gameObject);
             Assert.That(EventBus.Publish(new CanvasTestInput(controller)), Is.False);
             Assert.That(older.Calls, Is.Zero);
-            Assert.That(canvas.FocusedWidget, Is.SameAs(older));
+            Assert.That(canvas.FocusedCanvas, Is.SameAs(older));
             Assert.That(InputFocus.IsBlocked(controller), Is.True);
         }
 
         [Test] public void LayerOutranksRecencyAndPassiveOverlayDoesNotStealFocus()
         {
-            var modal = canvas.AttachWidget(prefab, widget => widget.TestLayer = WidgetLayer.Modal);
-            var screen = canvas.AttachWidget(prefab);
-            var toast = canvas.AttachWidget(prefab, widget =>
+            var modal = canvas.Show(prefab, widget => widget.TestLayer = CanvasLayer.Modal);
+            var screen = canvas.Show(prefab);
+            var toast = canvas.Show(prefab, widget =>
             {
-                widget.TestLayer = WidgetLayer.Overlay;
-                widget.Policy = WidgetInputPolicy.Passive;
+                widget.TestLayer = CanvasLayer.Overlay;
+                widget.Policy = CanvasInputPolicy.Passive;
             });
             EventBus.Publish(new CanvasTestInput(controller));
             Assert.That(modal.Calls, Is.EqualTo(1));
             Assert.That(screen.Calls, Is.Zero);
             Assert.That(toast.Calls, Is.Zero);
-            Assert.That(canvas.FocusedWidget, Is.SameAs(modal));
+            Assert.That(canvas.FocusedCanvas, Is.SameAs(modal));
             Assert.That(screen.GetComponent<CanvasGroup>().interactable, Is.False);
             Assert.That(toast.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
         }
 
         [Test] public void RemovingMiddleThenAttachingStillGivesNewestFirst()
         {
-            var first = canvas.AttachWidget(prefab);
-            var middle = canvas.AttachWidget(prefab);
-            var third = canvas.AttachWidget(prefab);
+            var first = canvas.Show(prefab);
+            var middle = canvas.Show(prefab);
+            var third = canvas.Show(prefab);
             UnityEngine.Object.DestroyImmediate(middle.gameObject);
-            var newest = canvas.AttachWidget(prefab);
+            var newest = canvas.Show(prefab);
             EventBus.Publish(new CanvasTestInput(controller));
             Assert.That(newest.Calls, Is.EqualTo(1));
             Assert.That(third.Calls + first.Calls, Is.Zero);
@@ -109,8 +109,8 @@ namespace UnscriptedEngine.Tests
 
         [Test] public void HideAndDestroyReleaseOnlyTheirOwnFocusLeases()
         {
-            var first = canvas.AttachWidget(prefab);
-            var second = canvas.AttachWidget(prefab);
+            var first = canvas.Show(prefab);
+            var second = canvas.Show(prefab);
             second.Hide();
             Assert.That(InputFocus.IsBlocked(controller), Is.True);
             first.Hide();
@@ -124,7 +124,7 @@ namespace UnscriptedEngine.Tests
         [Test] public void OtherControllerIsNotBlockedOrConsumed()
         {
             var other = Create("Other", typeof(CanvasTestController)).GetComponent<CanvasTestController>();
-            var widget = canvas.AttachWidget(prefab);
+            var widget = canvas.Show(prefab);
             Assert.That(EventBus.Publish(new CanvasTestInput(other)), Is.True);
             Assert.That(widget.Calls, Is.Zero);
             Assert.That(InputFocus.IsBlocked(other), Is.False);
@@ -132,7 +132,7 @@ namespace UnscriptedEngine.Tests
 
         [Test] public void InitializationPrecedesShowingAndDisableUnsubscribes()
         {
-            var widget = canvas.AttachWidget(prefab, instance => instance.Initialized = true);
+            var widget = canvas.Show(prefab, instance => instance.Initialized = true);
             Assert.That(widget.ShownAfterInitialization, Is.True);
             canvas.enabled = false;
             Assert.That(InputFocus.IsBlocked(controller), Is.False);
@@ -144,9 +144,9 @@ namespace UnscriptedEngine.Tests
 
         [Test] public void WidgetAttachedDuringDispatchDoesNotReceiveOpeningEvent()
         {
-            var widget = canvas.AttachWidget(prefab, instance => instance.Policy = WidgetInputPolicy.HandleOnly);
+            var widget = canvas.Show(prefab, instance => instance.Policy = CanvasInputPolicy.HandleOnly);
             CanvasTestWidget opened = null;
-            widget.OnInput = _ => opened = canvas.AttachWidget(prefab);
+            widget.OnInput = _ => opened = canvas.Show(prefab);
             EventBus.Publish(new CanvasTestInput(controller));
             Assert.That(opened.Calls, Is.Zero);
         }
@@ -154,11 +154,11 @@ namespace UnscriptedEngine.Tests
         [Test] public void ClosingModalRestoresSelectionAndLeavesOnePointerBackdrop()
         {
             var eventSystem = Create("EventSystem", typeof(EventSystem)).GetComponent<EventSystem>();
-            var first = canvas.AttachWidget(prefab);
+            var first = canvas.Show(prefab);
             var button = Create("Button", typeof(RectTransform), typeof(Button));
             button.transform.SetParent(first.transform, false);
             eventSystem.SetSelectedGameObject(button);
-            var second = canvas.AttachWidget(prefab);
+            var second = canvas.Show(prefab);
             Assert.That(eventSystem.currentSelectedGameObject, Is.Null);
             Assert.That(first.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
             int activeBackdrops = 0;
@@ -172,11 +172,11 @@ namespace UnscriptedEngine.Tests
 
         [Test] public void FailedInitializationLeavesNoWidgetOrFocusLease()
         {
-            Assert.Throws<InvalidOperationException>(() => canvas.AttachWidget(prefab,
+            Assert.Throws<InvalidOperationException>(() => canvas.Show(prefab,
                 _ => throw new InvalidOperationException("Initialization failed")));
-            Assert.That(canvas.FocusedWidget, Is.Null);
+            Assert.That(canvas.FocusedCanvas, Is.Null);
             Assert.That(InputFocus.IsBlocked(controller), Is.False);
-            Assert.That(canvas.GetComponentsInChildren<UWidgetComponent>(true), Is.Empty);
+            Assert.That(canvas.GetComponentsInChildren<UCanvasComponent>(true), Is.Empty);
         }
     }
 }

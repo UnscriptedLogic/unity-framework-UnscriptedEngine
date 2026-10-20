@@ -65,16 +65,15 @@ All paths are relative to the selected root. Missing folders are created recursi
 The same Skip Existing / Replace Existing / Cancel prompt handles output collisions.
 Generated scripts import `UnscriptedEngine` and `UnscriptedEngine.UI`.
 
-Canvas prefabs include RectTransform, Canvas (Screen Space Overlay), CanvasScaler
-(Scale With Screen Size, 1920 x 1080, match 0.5), GraphicRaycaster, and the generated
-canvas subclass. Widget prefabs include a stretching RectTransform, CanvasGroup,
-and the generated widget subclass. Both roots use the UI layer. Widgets use their
-owning canvas rather than adding a nested Canvas or raycaster.
+Screen and widget prefabs contain a stretching RectTransform, CanvasGroup, and their
+respective generated subclass. Both roots use the UI layer. UCanvasController owns
+the Unity Canvas, scaling, raycasting, and screen layers.
 
-Place the canvas prefab in your scene and initialize it with its local controller.
-Use `AttachWidget` to instantiate widgets. Your scene needs one EventSystem with
-the input module appropriate for your project. It is not embedded in each prefab.
-Override canvas lifecycle methods only when needed and call their base implementations.
+Create and initialize a UCanvasController for the local player. Use Show or BindToggle
+to display screen prefabs. Place reusable widgets beneath a screen; they register
+membership automatically. Your scene needs one EventSystem with the appropriate
+input module. It is not embedded in each prefab. Call base implementations when
+overriding OnEnable, OnDisable, OnDestroy, or OnTransformParentChanged.
 
 The tool lives in the optional `UnscriptedEngine.UI.Editor` assembly; it requires
 Unity UI 2.0 or later. Custom output assembly definitions must reference

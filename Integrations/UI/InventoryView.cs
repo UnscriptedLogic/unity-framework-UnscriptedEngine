@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnscriptedEngine;
 
-public class InventoryView : UWidgetComponent
+public class InventoryView : UCanvasComponent
 {
     [SerializeField] private GameObject slotPrefab;
     [SerializeField] private Transform gridContainer;
