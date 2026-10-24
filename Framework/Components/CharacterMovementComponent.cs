@@ -18,6 +18,7 @@ namespace UnscriptedEngine
             public float MoveY;
             public float MoveZ;
             public float ControlYaw;
+            public float BodyYaw;
             public bool JumpPressed;
             public bool IsFlying;
 
@@ -29,6 +30,7 @@ namespace UnscriptedEngine
                     && MoveY.Equals(other.MoveY)
                     && MoveZ.Equals(other.MoveZ)
                     && ControlYaw.Equals(other.ControlYaw)
+                    && BodyYaw.Equals(other.BodyYaw)
                     && JumpPressed == other.JumpPressed
                     && IsFlying == other.IsFlying;
             }
@@ -40,7 +42,7 @@ namespace UnscriptedEngine
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, MoveZ, ControlYaw, JumpPressed, IsFlying);
+                return HashCode.Combine(HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, MoveZ, ControlYaw, JumpPressed, IsFlying), BodyYaw);
             }
         }
 
@@ -49,14 +51,16 @@ namespace UnscriptedEngine
             public int Tick;
             public Vector3 Position;
             public Vector3 Velocity;
+            public float BodyYaw;
             public bool IsGrounded;
             public bool IsFlying;
 
-            public CharacterMoveState(int tick, Vector3 position, Vector3 velocity, bool isGrounded, bool isFlying)
+            public CharacterMoveState(int tick, Vector3 position, Vector3 velocity, bool isGrounded, bool isFlying, float bodyYaw = 0f)
             {
                 Tick = tick;
                 Position = position;
                 Velocity = velocity;
+                BodyYaw = bodyYaw;
                 IsGrounded = isGrounded;
                 IsFlying = isFlying;
             }
@@ -66,6 +70,7 @@ namespace UnscriptedEngine
                 return Tick == other.Tick
                     && Position.Equals(other.Position)
                     && Velocity.Equals(other.Velocity)
+                    && BodyYaw.Equals(other.BodyYaw)
                     && IsGrounded == other.IsGrounded
                     && IsFlying == other.IsFlying;
             }
@@ -77,7 +82,7 @@ namespace UnscriptedEngine
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(Tick, Position, Velocity, IsGrounded, IsFlying);
+                return HashCode.Combine(Tick, Position, Velocity, IsGrounded, IsFlying, BodyYaw);
             }
         }
 
@@ -384,6 +389,10 @@ namespace UnscriptedEngine
                     transform.position,
                     proxyTargetState.Position,
                     1f - Mathf.Exp(-proxyInterpolationSpeed * deltaTime));
+                transform.rotation = Quaternion.Slerp(
+                    transform.rotation,
+                    Quaternion.Euler(0f, proxyTargetState.BodyYaw, 0f),
+                    1f - Mathf.Exp(-proxyInterpolationSpeed * deltaTime));
             }
         }
 
@@ -397,6 +406,7 @@ namespace UnscriptedEngine
                 MoveY = pendingMoveInput.y,
                 MoveZ = pendingVerticalMoveInput,
                 ControlYaw = controlYaw,
+                BodyYaw = transform.eulerAngles.y,
                 JumpPressed = jumpQueued,
                 IsFlying = isFlying
             };
@@ -418,6 +428,8 @@ namespace UnscriptedEngine
             input.MoveY = move.y;
             input.MoveZ = Mathf.Clamp(input.MoveZ, -1f, 1f);
             input.DeltaTime = Mathf.Clamp(input.DeltaTime, 1f / 120f, 1f / 15f);
+            input.BodyYaw = float.IsNaN(input.BodyYaw) || float.IsInfinity(input.BodyYaw)
+                ? transform.eulerAngles.y : Mathf.Repeat(input.BodyYaw, 360f);
             return input;
         }
 
@@ -539,7 +551,7 @@ namespace UnscriptedEngine
 
         private CharacterMoveState CaptureState(int tick)
         {
-            return new CharacterMoveState(tick, transform.position, velocity, isGrounded, isFlying);
+            return new CharacterMoveState(tick, transform.position, velocity, isGrounded, isFlying, transform.eulerAngles.y);
         }
 
         private void StoreInput(CharacterMoveInput input)
@@ -562,6 +574,10 @@ namespace UnscriptedEngine
                 return;
             }
 
+            // Body facing is independent of movement/control yaw in free orbit.
+            // Apply only on the receiving server, never during owner prediction
+            // or reconciliation replay, which must preserve current local look.
+            transform.rotation = Quaternion.Euler(0f, input.BodyYaw, 0f);
             SimulateMove(input);
             lastProcessedServerTick = input.Tick;
             authoritativeState.Value = CaptureState(input.Tick);
