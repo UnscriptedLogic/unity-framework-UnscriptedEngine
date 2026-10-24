@@ -11,6 +11,7 @@ namespace UnscriptedEngine.UI
     public class UCanvasController : MonoBehaviour
     {
         public const int InputPriority = 1000;
+
         private readonly List<UCanvasComponent> canvases = new();
         private readonly Dictionary<UCanvasComponent, IDisposable> leases = new();
         private readonly Dictionary<UCanvasComponent, GameObject> backdrops = new();
@@ -19,8 +20,11 @@ namespace UnscriptedEngine.UI
         private RectTransform staging;
         private UCanvasComponent focused;
         private bool destroying;
+        private bool hierarchyDirty;
+
         public UController OwningController { get; private set; }
         public UCanvasComponent FocusedCanvas => focused;
+
         private sealed class Binding
         {
             public string ActionKey;
@@ -29,23 +33,29 @@ namespace UnscriptedEngine.UI
             public Func<UCanvasComponent> Open;
             public UCanvasComponent Instance;
         }
+
         private readonly List<Binding> bindings = new();
+
         public string BackAction { get; set; }
         public string NextWidgetAction { get; set; }
         public string PreviousWidgetAction { get; set; }
 
         public static UCanvasController Create(UController owner)
         {
-            var root = new GameObject("Player UI", typeof(RectTransform));
+            GameObject root = new GameObject("Player UI", typeof(RectTransform));
             root.layer = LayerMask.NameToLayer("UI");
-            var controller = root.AddComponent<UCanvasController>();
+
+            UCanvasController controller = root.AddComponent<UCanvasController>();
             root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
             root.GetComponent<Canvas>().sortingOrder = 100;
-            var scaler = root.GetComponent<CanvasScaler>();
+
+            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920, 1080);
             scaler.matchWidthOrHeight = 1;
+
             controller.Initialize(owner);
+
             return controller;
         }
 
@@ -62,15 +72,24 @@ namespace UnscriptedEngine.UI
         {
             if (string.IsNullOrWhiteSpace(actionKey)) throw new ArgumentException("An action key is required.", nameof(actionKey));
             if (open == null) throw new ArgumentNullException(nameof(open));
+
             if (bindings.Exists(binding => string.Equals(binding.ActionKey, actionKey, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("An action is already bound: " + actionKey);
-            bindings.Add(new Binding { ActionKey = actionKey, Open = open, Toggle = toggle, AllowDuringModal = allowDuringModal });
+
+            bindings.Add(new Binding
+            {
+                ActionKey = actionKey,
+                Open = open,
+                Toggle = toggle,
+                AllowDuringModal = allowDuringModal
+            });
         }
 
         private static bool Matches(PlayerActionInputEvent input, string key) =>
             !string.IsNullOrEmpty(key) && string.Equals(input.ActionKey, key, StringComparison.OrdinalIgnoreCase);
 
         private Binding FindBinding(PlayerActionInputEvent input) => bindings.Find(binding => Matches(input, binding.ActionKey));
+
         private void ExecuteBinding(Binding binding)
         {
             if (binding.Instance != null && binding.Instance.Controller == this)
@@ -79,6 +98,7 @@ namespace UnscriptedEngine.UI
                 else if (binding.Toggle && binding.Instance == focused) Close(binding.Instance);
                 return;
             }
+
             binding.Instance = binding.Open();
             if (binding.Instance == null || binding.Instance.Controller != this)
                 throw new InvalidOperationException("UI binding factory must return a screen owned by this controller.");
@@ -89,6 +109,7 @@ namespace UnscriptedEngine.UI
             if (controller == null) throw new ArgumentNullException(nameof(controller));
             if (canvases.Count != 0 && OwningController != controller)
                 throw new InvalidOperationException("Detach canvases before changing the owning controller.");
+
             OwningController = controller;
         }
 
@@ -96,20 +117,24 @@ namespace UnscriptedEngine.UI
         {
             staging = CreateRect("Inactive staging", transform);
             staging.gameObject.SetActive(false);
+
             foreach (CanvasLayer layer in Enum.GetValues(typeof(CanvasLayer)))
                 layers.Add(layer, CreateRect(layer.ToString(), transform));
+
             RegisterInput<PlayerActionInputEvent>();
         }
 
         public void RegisterInput<T>() where T : PlayerInputEvent
         {
             if (subscriptions.ContainsKey(typeof(T))) return;
+
             Action<T> listener = input => RouteInput(input);
             Action<bool> bind = enabled =>
             {
                 if (enabled) EventBus.Subscribe(listener, InputPriority);
                 else EventBus.Unsubscribe(listener);
             };
+
             subscriptions.Add(typeof(T), bind);
             if (isActiveAndEnabled) bind(true);
         }
@@ -120,14 +145,16 @@ namespace UnscriptedEngine.UI
         {
             if (prefab == null) throw new ArgumentNullException(nameof(prefab));
             if (OwningController == null) throw new InvalidOperationException("Initialize the canvas with a local controller first.");
-            var screen = Instantiate(prefab, staging, false);
+
+            T screen = Instantiate(prefab, staging, false);
             return AttachInstance(screen, initialize);
         }
 
         public T CreateCanvas<T>(Action<T> initialize = null) where T : UCanvasComponent
         {
             if (OwningController == null) throw new InvalidOperationException("Initialize the controller first.");
-            var root = new GameObject(typeof(T).Name, typeof(RectTransform));
+
+            GameObject root = new GameObject(typeof(T).Name, typeof(RectTransform));
             root.SetActive(false);
             root.transform.SetParent(staging, false);
             return AttachInstance(root.AddComponent<T>(), initialize);
@@ -138,26 +165,32 @@ namespace UnscriptedEngine.UI
             screen.gameObject.SetActive(false);
             if (screen.GetComponent<CanvasGroup>() == null) screen.gameObject.AddComponent<CanvasGroup>();
             screen.Controller = this;
+
             try
             {
                 screen.Attach();
                 initialize?.Invoke(screen);
+
                 // Includes third-party UI instantiated by the initialization callback.
-                foreach (var canvas in screen.GetComponentsInChildren<Canvas>(true)) canvas.overrideSorting = false;
+                foreach (Canvas canvas in screen.GetComponentsInChildren<Canvas>(true)) canvas.overrideSorting = false;
+
                 canvases.Add(screen);
-                var parent = layers[screen.Layer];
+                RectTransform parent = layers[screen.Layer];
+
                 if (screen.InputPolicy == CanvasInputPolicy.Modal)
                 {
-                    var backdrop = CreateRect("Modal backdrop", parent);
-                    var image = backdrop.gameObject.AddComponent<Image>();
+                    RectTransform backdrop = CreateRect("Modal backdrop", parent);
+                    Image image = backdrop.gameObject.AddComponent<Image>();
                     image.color = Color.clear;
                     image.raycastTarget = true;
                     backdrops.Add(screen, backdrop.gameObject);
                 }
+
                 screen.transform.SetParent(parent, false);
                 Stretch((RectTransform)screen.transform);
                 screen.gameObject.SetActive(true);
                 RefreshCanvases();
+
                 return screen;
             }
             catch
@@ -171,6 +204,7 @@ namespace UnscriptedEngine.UI
         public void Close(UCanvasComponent screen)
         {
             if (screen == null || screen.Controller != this) return;
+
             screen.gameObject.SetActive(false);
             ForgetCanvas(screen);
             DestroyOwnedObject(screen.gameObject);
@@ -179,16 +213,19 @@ namespace UnscriptedEngine.UI
         internal void ForgetCanvas(UCanvasComponent screen)
         {
             if (screen.Controller != this) return;
+
             canvases.Remove(screen);
-            if (leases.Remove(screen, out var lease)) lease.Dispose();
-            if (backdrops.Remove(screen, out var backdrop) && backdrop != null)
+            if (leases.Remove(screen, out IDisposable lease)) lease.Dispose();
+            if (backdrops.Remove(screen, out GameObject backdrop) && backdrop != null)
             {
                 backdrop.SetActive(false);
                 DestroyOwnedObject(backdrop);
             }
+
             screen.SetFocused(false);
             screen.Controller = null;
             screen.Detach();
+
             if (!destroying) RefreshCanvases();
         }
 
@@ -203,9 +240,11 @@ namespace UnscriptedEngine.UI
         public void RouteInput(PlayerInputEvent input)
         {
             if (!isActiveAndEnabled || input.IsCancelled || input.Controller != OwningController) return;
-            var action = input as PlayerActionInputEvent;
+
+            PlayerActionInputEvent action = input as PlayerActionInputEvent;
             bool pressed = action != null && action.IsPerformed && action.IsPressed && !action.IsSynthetic;
-            var binding = pressed ? FindBinding(action) : null;
+            Binding binding = pressed ? FindBinding(action) : null;
+
             // Explicit global bindings (e.g. the developer console) can cross modal boundaries.
             if (binding != null && binding.AllowDuringModal)
             {
@@ -213,12 +252,14 @@ namespace UnscriptedEngine.UI
                 ExecuteBinding(binding);
                 return;
             }
-            var ordered = OrderedCanvases();
+
+            List<UCanvasComponent> ordered = OrderedCanvases();
             for (int i = ordered.Count - 1; i >= 0; i--)
             {
-                var screen = ordered[i];
+                UCanvasComponent screen = ordered[i];
                 if (screen == null || screen.Controller != this || !screen.isActiveAndEnabled ||
                     screen.InputPolicy == CanvasInputPolicy.Passive) continue;
+
                 bool modal = screen.InputPolicy == CanvasInputPolicy.Modal;
                 if (screen.RouteInput(input) || input.IsCancelled)
                 {
@@ -256,81 +297,136 @@ namespace UnscriptedEngine.UI
                         return;
                     }
                 }
-                if (modal) { input.Cancel(); return; }
+                if (modal)
+                {
+                    input.Cancel();
+                    return;
+                }
             }
-            if (binding != null) { input.Cancel(); ExecuteBinding(binding); }
+
+            if (binding != null)
+            {
+                input.Cancel();
+                ExecuteBinding(binding);
+            }
         }
 
         private List<UCanvasComponent> OrderedCanvases()
         {
             // Stable insertion preserves attachment order within each layer.
-            var ordered = new List<UCanvasComponent>();
+            List<UCanvasComponent> ordered = new List<UCanvasComponent>();
             foreach (CanvasLayer layer in Enum.GetValues(typeof(CanvasLayer)))
-                foreach (var screen in canvases)
+                foreach (UCanvasComponent screen in canvases)
                     if (screen != null && screen.Layer == layer) ordered.Add(screen);
+
             return ordered;
         }
 
         internal void RefreshCanvases()
         {
             if (destroying) return;
-            var ordered = OrderedCanvases();
+
+            // OnEnable/OnDisable can run while Unity is traversing a parent hierarchy.
+            // Update input state immediately, but defer hierarchy mutations until LateUpdate.
+            hierarchyDirty = true;
+
+            List<UCanvasComponent> ordered = OrderedCanvases();
             UCanvasComponent nextFocus = null;
             bool covered = false;
+
             for (int i = ordered.Count - 1; i >= 0; i--)
             {
-                var screen = ordered[i];
+                UCanvasComponent screen = ordered[i];
                 bool shown = isActiveAndEnabled && screen.isActiveAndEnabled;
                 bool interactive = shown && !covered && screen.InputPolicy != CanvasInputPolicy.Passive;
-                var group = screen.GetComponent<CanvasGroup>();
+
+                CanvasGroup group = screen.GetComponent<CanvasGroup>();
                 group.interactable = interactive;
                 group.blocksRaycasts = interactive;
+
                 if (interactive && nextFocus == null) nextFocus = screen;
+
                 bool modal = shown && screen.InputPolicy == CanvasInputPolicy.Modal;
                 if (modal && !leases.ContainsKey(screen)) leases.Add(screen, InputFocus.Acquire(screen, OwningController));
-                if (!modal && leases.Remove(screen, out var lease)) lease.Dispose();
-                if (backdrops.TryGetValue(screen, out var backdrop)) backdrop.SetActive(modal && !covered);
+                if (!modal && leases.Remove(screen, out IDisposable lease)) lease.Dispose();
                 if (modal) covered = true;
             }
-            foreach (var screen in ordered)
-            {
-                if (backdrops.TryGetValue(screen, out var backdrop)) backdrop.transform.SetAsLastSibling();
-                screen.transform.SetAsLastSibling();
-            }
+
             if (focused == nextFocus) return;
-            var eventSystem = EventSystem.current;
+
+            EventSystem eventSystem = EventSystem.current;
             if (focused != null)
             {
-                var selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
+                GameObject selected = eventSystem != null ? eventSystem.currentSelectedGameObject : null;
                 if (selected != null && selected.transform.IsChildOf(focused.transform)) focused.LastSelection = selected;
                 focused.SetFocused(false);
             }
+
             focused = nextFocus;
             if (focused != null) focused.SetFocused(true);
             if (eventSystem != null) eventSystem.SetSelectedGameObject(focused != null ? focused.Selection : null);
             if (focused != null) focused.SyncSelection();
         }
 
+        protected virtual void LateUpdate()
+        {
+            if (destroying || !hierarchyDirty) return;
+
+            hierarchyDirty = false;
+            List<UCanvasComponent> ordered = OrderedCanvases();
+            bool covered = false;
+
+            for (int i = ordered.Count - 1; i >= 0; i--)
+            {
+                UCanvasComponent screen = ordered[i];
+                bool modal = screen.isActiveAndEnabled && screen.InputPolicy == CanvasInputPolicy.Modal;
+
+                if (backdrops.TryGetValue(screen, out GameObject backdrop) && backdrop != null)
+                {
+                    bool visible = modal && !covered;
+                    if (backdrop.activeSelf != visible) backdrop.SetActive(visible);
+                }
+
+                if (modal) covered = true;
+            }
+
+            foreach (UCanvasComponent screen in ordered)
+            {
+                if (backdrops.TryGetValue(screen, out GameObject backdrop) && backdrop != null)
+                    backdrop.transform.SetAsLastSibling();
+
+                screen.transform.SetAsLastSibling();
+            }
+        }
+
         protected virtual void OnEnable()
         {
             // Awake can register while enabled; unsubscribe first to keep one listener per type.
-            foreach (var bind in subscriptions.Values) { bind(false); bind(true); }
+            foreach (Action<bool> bind in subscriptions.Values)
+            {
+                bind(false);
+                bind(true);
+            }
+
             RefreshCanvases();
         }
 
         protected virtual void OnDisable()
         {
-            foreach (var bind in subscriptions.Values) bind(false);
+            foreach (Action<bool> bind in subscriptions.Values) bind(false);
+
             RefreshCanvases();
         }
 
         protected virtual void OnDestroy()
         {
             destroying = true;
-            foreach (var bind in subscriptions.Values) bind(false);
-            foreach (var lease in leases.Values) lease.Dispose();
+
+            foreach (Action<bool> bind in subscriptions.Values) bind(false);
+            foreach (IDisposable lease in leases.Values) lease.Dispose();
             leases.Clear();
-            foreach (var screen in canvases.ToArray())
+
+            foreach (UCanvasComponent screen in canvases.ToArray())
                 if (screen != null)
                 {
                     screen.gameObject.SetActive(false);
@@ -338,15 +434,17 @@ namespace UnscriptedEngine.UI
                     screen.SetFocused(false);
                     screen.Detach();
                 }
+
             canvases.Clear();
         }
 
         private static RectTransform CreateRect(string name, Transform parent)
         {
-            var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
+            RectTransform rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>();
             rect.gameObject.layer = parent.gameObject.layer;
             rect.SetParent(parent, false);
             Stretch(rect);
+
             return rect;
         }
 

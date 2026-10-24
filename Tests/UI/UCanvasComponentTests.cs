@@ -162,12 +162,54 @@ namespace UnscriptedEngine.Tests
             Assert.That(eventSystem.currentSelectedGameObject, Is.Null);
             Assert.That(first.GetComponent<CanvasGroup>().blocksRaycasts, Is.False);
             int activeBackdrops = 0;
+            canvas.SendMessage("LateUpdate");
             foreach (var image in canvas.GetComponentsInChildren<Image>())
                 if (image.name == "Modal backdrop" && image.raycastTarget) activeBackdrops++;
             Assert.That(activeBackdrops, Is.EqualTo(1));
             second.Close();
             Assert.That(eventSystem.currentSelectedGameObject, Is.SameAs(button));
             Assert.That(first.GetComponent<CanvasGroup>().blocksRaycasts, Is.True);
+        }
+
+        [Test] public void ParentActivationDoesNotReorderChildrenDuringUnityTraversal()
+        {
+            CanvasTestWidget hud = canvas.Show(prefab, instance =>
+            {
+                instance.TestLayer = CanvasLayer.HUD;
+                instance.Policy = CanvasInputPolicy.Passive;
+            });
+            CanvasTestWidget modal = canvas.Show(prefab);
+            GameObject hudLayer = hud.transform.parent.gameObject;
+
+            hudLayer.SetActive(false);
+            hudLayer.SetActive(true);
+            canvas.gameObject.SetActive(false);
+
+            Assert.That(InputFocus.IsBlocked(controller), Is.False);
+
+            canvas.gameObject.SetActive(true);
+            Assert.That(InputFocus.IsBlocked(controller), Is.True);
+            Assert.That(canvas.FocusedCanvas, Is.SameAs(modal));
+
+            canvas.SendMessage("LateUpdate");
+            UnityEngine.TestTools.LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test] public void BringToFrontUpdatesInputImmediatelyAndVisualOrderInLateUpdate()
+        {
+            CanvasTestWidget first = canvas.Show(prefab);
+            CanvasTestWidget second = canvas.Show(prefab);
+            canvas.SendMessage("LateUpdate");
+
+            canvas.BringToFront(first);
+            Assert.That(canvas.FocusedCanvas, Is.SameAs(first));
+            Assert.That(first.transform.GetSiblingIndex(), Is.LessThan(second.transform.GetSiblingIndex()));
+
+            canvas.SendMessage("LateUpdate");
+
+            Assert.That(first.transform.GetSiblingIndex(), Is.GreaterThan(second.transform.GetSiblingIndex()));
+            Assert.That(first.transform.parent.GetChild(first.transform.GetSiblingIndex() - 1).name,
+                Is.EqualTo("Modal backdrop"));
         }
 
         [Test] public void FailedInitializationLeavesNoWidgetOrFocusLease()
