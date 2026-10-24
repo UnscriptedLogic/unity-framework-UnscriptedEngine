@@ -8,7 +8,7 @@ namespace UnscriptedEngine.Settings
     [Serializable]
     public sealed class SettingsPreferences
     {
-        public List<SettingValueRecord> values = new();
+        public List<SettingValueRecord> values = new List<SettingValueRecord>();
     }
 
     [Serializable]
@@ -18,211 +18,290 @@ namespace UnscriptedEngine.Settings
         public string value;
     }
 
-    /// <summary>Main-thread service. Definitions remain immutable while registered.</summary>
+    /// <summary>Main-thread state store. Scene registrations determine activation, not code references.</summary>
     public sealed class SettingsService
     {
         private sealed class Entry
         {
-            public SettingDefinition Definition;
+            public readonly SettingDefinition Definition;
             public int Owners;
             public object Override;
             public object ServerValue;
             public event Action<object> Changed;
-            public void Add(Action<object> listener) => Changed += listener;
-            public void Remove(Action<object> listener) => Changed -= listener;
+
+            public Entry(SettingDefinition definition) => Definition = definition;
+            public void Subscribe(Action<object> listener) => Changed += listener;
+            public void Unsubscribe(Action<object> listener) => Changed -= listener;
+
             public void Notify(object value)
             {
                 if (Changed == null) return;
                 foreach (Action<object> listener in Changed.GetInvocationList())
-                    try { listener(value); } catch (Exception e) { Debug.LogException(e); }
+                {
+                    try { listener(value); }
+                    catch (Exception exception) { Debug.LogException(exception); }
+                }
             }
         }
 
-        private sealed class Lease : IDisposable
+        private sealed class RegistrationLease : IDisposable
         {
             private Action release;
-            public Lease(Action release) => this.release = release;
-            public void Dispose() { var action = release; release = null; action?.Invoke(); }
+
+            public RegistrationLease(Action release) => this.release = release;
+
+            public void Dispose()
+            {
+                Action action = release;
+                release = null;
+                action?.Invoke();
+            }
         }
 
-        private readonly Dictionary<string, Entry> entries = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, string> saved = new(StringComparer.Ordinal);
-        private readonly Dictionary<SettingsGroup, int> roots = new();
+        private readonly Dictionary<string, Entry> entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> saved = new Dictionary<string, string>(StringComparer.Ordinal);
+
         public SettingsRole Role { get; private set; }
         public event Action StructureChanged;
         public event Action PreferencesChanged;
         public event Action<SettingDefinition, object> ValueChanged;
-        public IEnumerable<SettingsGroup> ActiveGroups => roots.Keys.OrderBy(g => g.Order).ThenBy(g => g.DisplayName);
+        public IReadOnlyList<SettingsGroup> ActiveGroups => SettingsGroup.BuildTree(GetActiveDefinitions());
 
         public SettingsService(SettingsRole role = SettingsRole.Standalone) => Role = role;
 
-        private Entry Ensure(SettingDefinition definition)
+        public IReadOnlyList<SettingDefinition> GetActiveDefinitions()
         {
-            if (definition == null || string.IsNullOrWhiteSpace(definition.Id))
-                throw new ArgumentException("Settings require a definition with a stable ID.");
-            if (entries.TryGetValue(definition.Id, out var entry))
-            {
-                if (entry.Definition != definition)
-                    throw new ArgumentException($"Different definitions share setting ID '{definition.Id}'.");
-                return entry;
-            }
-            entry = new Entry { Definition = definition };
-            if (definition.Scope == SettingScope.LocalUser && saved.TryGetValue(definition.Id, out var json) &&
-                definition.TryDeserializeValue(json, out var value)) entry.Override = value;
-            entries.Add(definition.Id, entry);
-            return entry;
+            return entries.Values.Where(entry => entry.Owners > 0)
+                .Select(entry => entry.Definition).OrderBy(definition => definition.Id, StringComparer.Ordinal)
+                .ToList().AsReadOnly();
         }
 
-        private object Effective(Entry entry)
+        public T Get<T>(Setting<T> definition) => (T)Get((SettingDefinition)definition);
+        public object Get(SettingDefinition definition) => GetEffectiveValue(GetOrCreateEntry(definition));
+        public bool IsActive(SettingDefinition definition) => GetOrCreateEntry(definition).Owners > 0;
+
+        public bool CanWrite(SettingDefinition definition)
         {
-            if (entry.Definition.Scope == SettingScope.ServerSession && Role == SettingsRole.Client)
-                return entry.ServerValue ?? entry.Definition.DefaultObject;
-            return entry.Owners > 0 ? entry.Override ?? entry.Definition.DefaultObject : entry.Definition.DefaultObject;
+            return IsActive(definition) &&
+                (definition.Scope == SettingScope.LocalUser || Role != SettingsRole.Client);
         }
 
-        public T Get<T>(SettingDefinition<T> definition) => (T)Get((SettingDefinition)definition);
-        public object Get(SettingDefinition definition) => Effective(Ensure(definition));
-        public bool IsActive(SettingDefinition definition) => Ensure(definition).Owners > 0;
-        public bool CanWrite(SettingDefinition definition) => IsActive(definition) &&
-            (definition.Scope == SettingScope.LocalUser || Role != SettingsRole.Client);
-
-        public IDisposable Observe<T>(SettingDefinition<T> definition, Action<T> callback, bool emitCurrent = true)
-            => Observe((SettingDefinition)definition, value => callback((T)value), emitCurrent);
+        public IDisposable Observe<T>(Setting<T> definition, Action<T> callback, bool emitCurrent = true)
+        {
+            if (callback == null) throw new ArgumentNullException(nameof(callback));
+            return Observe((SettingDefinition)definition, value => callback((T)value), emitCurrent);
+        }
 
         public IDisposable Observe(SettingDefinition definition, Action<object> callback, bool emitCurrent = true)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            var entry = Ensure(definition);
-            entry.Add(callback);
-            try { if (emitCurrent) callback(Effective(entry)); }
-            catch { entry.Remove(callback); throw; }
-            return new Lease(() => entry.Remove(callback));
+            Entry entry = GetOrCreateEntry(definition);
+            entry.Subscribe(callback);
+            try
+            {
+                if (emitCurrent) callback(GetEffectiveValue(entry));
+            }
+            catch
+            {
+                entry.Unsubscribe(callback);
+                throw;
+            }
+            return new RegistrationLease(() => entry.Unsubscribe(callback));
         }
 
-        public bool TrySet<T>(SettingDefinition<T> definition, T value) => TrySet((SettingDefinition)definition, value);
+        public bool TrySet<T>(Setting<T> definition, T value) => TrySet((SettingDefinition)definition, value);
+
         public bool TrySet(SettingDefinition definition, object value)
         {
-            if (!CanWrite(definition) || !definition.TryNormalize(value, out var normalized)) return false;
-            var entry = Ensure(definition);
-            var before = Effective(entry);
+            if (!CanWrite(definition) || !definition.TryNormalize(value, out object normalized)) return false;
+            Entry entry = GetOrCreateEntry(definition);
+            object previous = GetEffectiveValue(entry);
             entry.Override = normalized;
-            if (definition.Scope == SettingScope.LocalUser)
-            {
-                string json = definition.SerializeValue(normalized);
-                bool changed = !saved.TryGetValue(definition.Id, out var old) || old != json;
-                saved[definition.Id] = json;
-                if (changed) Publish(PreferencesChanged);
-            }
-            Notify(entry, before);
+            SaveLocalOverride(definition, normalized);
+            NotifyEffectiveValueChanged(entry, previous);
             return true;
         }
 
         public bool Reset(SettingDefinition definition)
         {
             if (!CanWrite(definition)) return false;
-            var entry = Ensure(definition);
-            var before = Effective(entry);
+            Entry entry = GetOrCreateEntry(definition);
+            object previous = GetEffectiveValue(entry);
             entry.Override = null;
-            if (definition.Scope == SettingScope.LocalUser && saved.Remove(definition.Id)) Publish(PreferencesChanged);
-            Notify(entry, before);
+            if (definition.Scope == SettingScope.LocalUser && saved.Remove(definition.Id))
+                PublishNotification(PreferencesChanged);
+            NotifyEffectiveValueChanged(entry, previous);
             return true;
         }
 
-        public IDisposable Register(SettingsGroup root)
+        public IDisposable Register(IEnumerable<SettingDefinition> definitions)
         {
-            if (root == null) throw new ArgumentNullException(nameof(root));
-            var definitions = root.Flatten();
-            // Validate the complete registration before activating any values.
-            var ids = new Dictionary<string, SettingDefinition>(StringComparer.Ordinal);
-            foreach (var definition in definitions)
+            if (definitions == null) throw new ArgumentNullException(nameof(definitions));
+            SettingDefinition[] uniqueDefinitions = definitions.Distinct().ToArray();
+            ValidateRegistration(uniqueDefinitions);
+            Entry[] registeredEntries = uniqueDefinitions.Select(GetOrCreateEntry).ToArray();
+            Dictionary<Entry, object> previous = CaptureEffectiveValues(registeredEntries);
+            foreach (Entry entry in registeredEntries) entry.Owners++;
+            NotifyEffectiveValueChanges(previous);
+            PublishNotification(StructureChanged);
+            return new RegistrationLease(() => UnregisterEntries(registeredEntries));
+        }
+
+        public SettingsPreferences ExportPreferences()
+        {
+            SettingsPreferences preferences = new SettingsPreferences();
+            foreach (KeyValuePair<string, string> pair in saved.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
-                if (string.IsNullOrWhiteSpace(definition.Id)) throw new ArgumentException("A setting is missing its ID.");
-                if (ids.TryGetValue(definition.Id, out var other) && other != definition)
-                    throw new ArgumentException($"Duplicate setting ID '{definition.Id}'.");
-                ids[definition.Id] = definition;
-                if (entries.TryGetValue(definition.Id, out var existing) && existing.Definition != definition)
-                    throw new ArgumentException($"Duplicate setting ID '{definition.Id}'.");
+                if (entries.TryGetValue(pair.Key, out Entry entry) && entry.Definition.Scope == SettingScope.ServerSession)
+                    continue;
+                preferences.values.Add(new SettingValueRecord { id = pair.Key, value = pair.Value });
             }
-            var registered = definitions.Select(Ensure).ToArray();
-            var before = registered.Select(Effective).ToArray();
-            foreach (var entry in registered) entry.Owners++;
-            roots[root] = roots.TryGetValue(root, out var count) ? count + 1 : 1;
-            for (int i = 0; i < registered.Length; i++) Notify(registered[i], before[i]);
-            Publish(StructureChanged);
-            return new Lease(() =>
-            {
-                var previous = registered.Select(Effective).ToArray();
-                foreach (var entry in registered) entry.Owners--;
-                if (--roots[root] == 0) roots.Remove(root);
-                for (int i = 0; i < registered.Length; i++) Notify(registered[i], previous[i]);
-                Publish(StructureChanged);
-            });
+            return preferences;
         }
-
-        private void Notify(Entry entry, object before)
-        {
-            var after = Effective(entry);
-            if (Equals(before, after)) return;
-            entry.Notify(after);
-            if (ValueChanged != null)
-                foreach (Action<SettingDefinition, object> listener in ValueChanged.GetInvocationList())
-                    try { listener(entry.Definition, after); } catch (Exception e) { Debug.LogException(e); }
-        }
-
-        private static void Publish(Action listeners)
-        {
-            if (listeners == null) return;
-            foreach (Action listener in listeners.GetInvocationList())
-                try { listener(); } catch (Exception e) { Debug.LogException(e); }
-        }
-
-        public SettingsPreferences ExportPreferences() => new()
-        {
-            values = saved.Where(pair => !entries.TryGetValue(pair.Key, out var entry) || entry.Definition.Scope == SettingScope.LocalUser)
-                .OrderBy(pair => pair.Key).Select(pair => new SettingValueRecord { id = pair.Key, value = pair.Value }).ToList()
-        };
 
         public void LoadPreferences(SettingsPreferences preferences)
         {
-            var before = entries.Values.ToDictionary(e => e, Effective);
+            Dictionary<Entry, object> previous = CaptureEffectiveValues(entries.Values);
             saved.Clear();
-            foreach (var record in preferences?.values ?? new List<SettingValueRecord>())
-                if (record != null && !string.IsNullOrWhiteSpace(record.id) && record.value != null)
-                    saved[record.id] = record.value;
-            foreach (var entry in before.Keys)
+            if (preferences?.values != null)
             {
-                if (entry.Definition.Scope != SettingScope.LocalUser) continue;
-                entry.Override = null;
-                if (saved.TryGetValue(entry.Definition.Id, out var json) && entry.Definition.TryDeserializeValue(json, out var value))
-                    entry.Override = value;
-                Notify(entry, before[entry]);
+                foreach (SettingValueRecord record in preferences.values)
+                    if (record != null && !string.IsNullOrWhiteSpace(record.id) && record.value != null)
+                        saved[record.id] = record.value;
             }
+            foreach (Entry entry in previous.Keys)
+                if (entry.Definition.Scope == SettingScope.LocalUser) RestoreSavedOverride(entry);
+            NotifyEffectiveValueChanges(previous);
         }
 
-        /// <summary>Transport/bootstrap operation, never a UI permission toggle. Clears session overrides.</summary>
+        /// <summary>Transport/bootstrap operation. Changing role clears session overrides.</summary>
         public void SetRole(SettingsRole role)
         {
             if (role == Role) return;
-            var before = entries.Values.ToDictionary(e => e, Effective);
+            Dictionary<Entry, object> previous = CaptureEffectiveValues(entries.Values);
             Role = role;
-            foreach (var entry in entries.Values.ToArray())
+            foreach (Entry entry in previous.Keys)
             {
-                if (entry.Definition.Scope == SettingScope.ServerSession) { entry.Override = null; entry.ServerValue = null; }
-                Notify(entry, before[entry]);
+                if (entry.Definition.Scope != SettingScope.ServerSession) continue;
+                entry.Override = null;
+                entry.ServerValue = null;
             }
-            Publish(StructureChanged);
+            NotifyEffectiveValueChanges(previous);
+            PublishNotification(StructureChanged);
         }
 
-        /// <summary>Call only from a transport handler after authenticating the server sender.</summary>
+        /// <summary>Transport adapter hook. Authenticate the server sender before calling.</summary>
         public bool ApplyServerValue(SettingDefinition definition, object value)
         {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
             if (Role != SettingsRole.Client || definition.Scope != SettingScope.ServerSession ||
-                !definition.TryNormalize(value, out var normalized)) return false;
-            var entry = Ensure(definition);
-            var before = Effective(entry);
+                !definition.TryNormalize(value, out object normalized)) return false;
+            Entry entry = GetOrCreateEntry(definition);
+            object previous = GetEffectiveValue(entry);
             entry.ServerValue = normalized;
-            Notify(entry, before);
+            NotifyEffectiveValueChanged(entry, previous);
             return true;
+        }
+
+        private Entry GetOrCreateEntry(SettingDefinition definition)
+        {
+            if (definition == null) throw new ArgumentNullException(nameof(definition));
+            if (entries.TryGetValue(definition.Id, out Entry existing))
+            {
+                ValidateMatchingDefinition(existing.Definition, definition);
+                return existing;
+            }
+            Entry entry = new Entry(definition);
+            RestoreSavedOverride(entry);
+            entries.Add(definition.Id, entry);
+            return entry;
+        }
+
+        private object GetEffectiveValue(Entry entry)
+        {
+            if (entry.Definition.Scope == SettingScope.ServerSession && Role == SettingsRole.Client)
+                return entry.ServerValue ?? entry.Definition.DefaultObject;
+            return entry.Owners > 0 ? entry.Override ?? entry.Definition.DefaultObject : entry.Definition.DefaultObject;
+        }
+
+        private void RestoreSavedOverride(Entry entry)
+        {
+            entry.Override = null;
+            if (entry.Definition.Scope == SettingScope.LocalUser &&
+                saved.TryGetValue(entry.Definition.Id, out string json) &&
+                entry.Definition.TryDeserializeValue(json, out object value))
+                entry.Override = value;
+        }
+
+        private void SaveLocalOverride(SettingDefinition definition, object value)
+        {
+            if (definition.Scope != SettingScope.LocalUser) return;
+            string json = definition.SerializeValue(value);
+            bool changed = !saved.TryGetValue(definition.Id, out string previous) || previous != json;
+            saved[definition.Id] = json;
+            if (changed) PublishNotification(PreferencesChanged);
+        }
+
+        private void ValidateRegistration(IEnumerable<SettingDefinition> definitions)
+        {
+            Dictionary<string, SettingDefinition> identities = new Dictionary<string, SettingDefinition>(StringComparer.Ordinal);
+            foreach (SettingDefinition definition in definitions)
+            {
+                if (definition == null) throw new ArgumentException("Cannot register a null setting.");
+                if (identities.TryGetValue(definition.Id, out SettingDefinition existing))
+                    ValidateMatchingDefinition(existing, definition);
+                identities[definition.Id] = definition;
+                if (entries.TryGetValue(definition.Id, out Entry entry))
+                    ValidateMatchingDefinition(entry.Definition, definition);
+            }
+        }
+
+        private static void ValidateMatchingDefinition(SettingDefinition existing, SettingDefinition incoming)
+        {
+            if (!ReferenceEquals(existing, incoming))
+                throw new ArgumentException($"Different definitions share setting ID '{incoming.Id}'. Reuse a static readonly declaration.");
+        }
+
+        private void UnregisterEntries(Entry[] registeredEntries)
+        {
+            Dictionary<Entry, object> previous = CaptureEffectiveValues(registeredEntries);
+            foreach (Entry entry in registeredEntries) entry.Owners--;
+            NotifyEffectiveValueChanges(previous);
+            PublishNotification(StructureChanged);
+        }
+
+        private Dictionary<Entry, object> CaptureEffectiveValues(IEnumerable<Entry> source)
+        {
+            return source.ToDictionary(entry => entry, GetEffectiveValue);
+        }
+
+        private void NotifyEffectiveValueChanges(Dictionary<Entry, object> previous)
+        {
+            foreach (KeyValuePair<Entry, object> pair in previous)
+                NotifyEffectiveValueChanged(pair.Key, pair.Value);
+        }
+
+        private void NotifyEffectiveValueChanged(Entry entry, object previous)
+        {
+            object current = GetEffectiveValue(entry);
+            if (Equals(previous, current)) return;
+            entry.Notify(current);
+            if (ValueChanged == null) return;
+            foreach (Action<SettingDefinition, object> listener in ValueChanged.GetInvocationList())
+            {
+                try { listener(entry.Definition, current); }
+                catch (Exception exception) { Debug.LogException(exception); }
+            }
+        }
+
+        private static void PublishNotification(Action listeners)
+        {
+            if (listeners == null) return;
+            foreach (Action listener in listeners.GetInvocationList())
+            {
+                try { listener(); }
+                catch (Exception exception) { Debug.LogException(exception); }
+            }
         }
     }
 }

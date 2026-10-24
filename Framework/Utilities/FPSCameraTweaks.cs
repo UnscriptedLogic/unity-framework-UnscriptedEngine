@@ -82,6 +82,7 @@ namespace UnscriptedEngine
         [Min(0f)] [SerializeField] private float tiltSmoothing = 10f;
 
         [Header("Dynamic FOV")]
+        [Tooltip("Enables speed-based FOV widening. FPSCameraSettingsBinding can override this flag from the local camera preference.")]
         [SerializeField] private bool enableDynamicFov = true;
         [SerializeField] private bool captureStartingFov = true;
         [Range(1f, 179f)] [SerializeField] private float baseFov = 60f;
@@ -247,6 +248,12 @@ namespace UnscriptedEngine
             hasOffset = true;
 
             UpdateDynamicFov(amount, deltaTime);
+        }
+
+        public void SetDynamicFovEnabled(bool enabled)
+        {
+            enableDynamicFov = enabled;
+            if (!enabled) RestoreAllFovValues();
         }
 
         private void UpdateDynamicFov(float speedAmount, float deltaTime)

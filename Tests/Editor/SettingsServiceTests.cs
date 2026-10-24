@@ -1,139 +1,253 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnscriptedEngine.Settings;
+using UnscriptedEngine.Editor;
 
 namespace UnscriptedEngine.Tests
 {
     public sealed class SettingsServiceTests
     {
-        private readonly List<UnityEngine.Object> objects = new();
-        private T Asset<T>() where T : ScriptableObject
-        { var asset = ScriptableObject.CreateInstance<T>(); objects.Add(asset); return asset; }
-        private FloatSettingDefinition Number(string id = "test.number", SettingScope scope = SettingScope.LocalUser)
+        private static Setting<float> Number(string id = "test.number", SettingScope scope = SettingScope.LocalUser,
+            string group = "Prototype/Experimental")
         {
-            var result = Asset<FloatSettingDefinition>(); result.Configure(id, "Number", scope);
-            result.SetRange(0, 10); result.SetDefault(2); return result;
-        }
-        private SettingsGroup Group(params SettingDefinition[] definitions)
-        { var group = Asset<SettingsGroup>(); group.Configure("Test", definitions); return group; }
-        [TearDown] public void TearDown()
-        { foreach (var asset in objects) UnityEngine.Object.DestroyImmediate(asset); objects.Clear(); }
-
-        [Test] public void InactiveSettingsReadDefaultsAndRejectWrites()
-        {
-            var service = new SettingsService(); var number = Number();
-            Assert.AreEqual(2, service.Get(number)); Assert.IsFalse(service.TrySet(number, 5f));
+            return Setting.Float(id, 2f, 0f, 10f, "Number", group, scope: scope);
         }
 
-        [Test] public void LastOwnerRemovalRevertsThenReactivationRestoresPreference()
+        private static IDisposable Register(SettingsService service, params SettingDefinition[] definitions)
         {
-            var service = new SettingsService(); var number = Number(); var group = Group(number);
-            var changes = new List<float>();
-            using var subscription = service.Observe(number, changes.Add);
-            var first = service.Register(group); var second = service.Register(group);
+            return service.Register(definitions);
+        }
+
+        [Test]
+        public void ReadsAndSubscriptionsDoNotActivateCatalogs()
+        {
+            SettingsService service = new SettingsService();
+            Setting<float> number = Number();
+            using IDisposable subscription = service.Observe(number, value => Assert.AreEqual(2f, value));
+            Assert.AreEqual(2f, service.Get(number));
+            Assert.IsFalse(service.TrySet(number, 5f));
+            Assert.IsEmpty(service.ActiveGroups);
+        }
+
+        [Test]
+        public void LastOwnerRemovalRevertsThenReactivationRestoresPreference()
+        {
+            SettingsService service = new SettingsService();
+            Setting<float> number = Number();
+            List<float> changes = new List<float>();
+            using IDisposable subscription = service.Observe(number, changes.Add);
+            IDisposable first = Register(service, number);
+            IDisposable second = Register(service, number);
             Assert.IsTrue(service.TrySet(number, 7f));
-            first.Dispose(); Assert.AreEqual(7, service.Get(number));
-            second.Dispose(); second.Dispose(); Assert.AreEqual(2, service.Get(number));
-            using var restored = service.Register(group); Assert.AreEqual(7, service.Get(number));
-            CollectionAssert.AreEqual(new[] { 2f, 7f, 2f, 7f }, changes);
+            first.Dispose();
+            Assert.AreEqual(7f, service.Get(number));
+            second.Dispose();
+            second.Dispose();
+            Assert.AreEqual(2f, service.Get(number));
+            using IDisposable restored = Register(service, number);
+            Assert.AreEqual(7f, service.Get(number));
+            CollectionAssert.AreEqual(new float[] { 2f, 7f, 2f, 7f }, changes);
         }
 
-        [Test] public void OverlappingGroupsDoNotDeactivateEachOther()
+        [Test]
+        public void PrototypeSwitchRemovesUnrelatedSettingsAndRetainsSavedOverrides()
         {
-            var service = new SettingsService(); var number = Number();
-            var first = service.Register(Group(number)); var second = service.Register(Group(number));
-            service.TrySet(number, 4f); first.Dispose(); Assert.AreEqual(4, service.Get(number));
-            second.Dispose(); Assert.AreEqual(2, service.Get(number));
+            SettingsService service = new SettingsService();
+            Setting<float> general = Number("general.value", group: "General");
+            Setting<float> grapple = Number("grapple.value", group: "Grapple");
+            Setting<float> racing = Number("racing.value", group: "Racing");
+            IDisposable firstScene = Register(service, general, grapple);
+            service.TrySet(grapple, 8f);
+            firstScene.Dispose();
+            using IDisposable secondScene = Register(service, general, racing);
+            CollectionAssert.AreEquivalent(new SettingDefinition[] { general, racing }, service.GetActiveDefinitions());
+            Assert.AreEqual(2f, service.Get(grapple));
+            using IDisposable returnedScene = Register(service, grapple);
+            Assert.AreEqual(8f, service.Get(grapple));
         }
 
-        [Test] public void ValidationRejectsNonFiniteAndWrongTypesClampsRangeAndSuppressesDuplicateEvents()
+        [Test]
+        public void SharedCategoriesMergeAndDuplicateRegistrationsDoNotDuplicateRows()
         {
-            var service = new SettingsService(); var number = Number(); using var module = service.Register(Group(number));
-            int events = 0; using var subscription = service.Observe(number, _ => events++, false);
-            Assert.IsFalse(service.TrySet(number, float.NaN)); Assert.IsFalse(service.TrySet(number, float.PositiveInfinity));
+            SettingsService service = new SettingsService();
+            Setting<float> first = Number("camera.one", group: "General/Camera");
+            Setting<float> second = Number("camera.two", group: "General/Camera");
+            using IDisposable ownerOne = Register(service, first, first);
+            using IDisposable ownerTwo = Register(service, first, second);
+            Assert.AreEqual(1, service.ActiveGroups.Count);
+            SettingsGroup camera = service.ActiveGroups[0].Children.Single();
+            Assert.AreEqual("General/Camera", camera.Path);
+            Assert.AreEqual(2, camera.Settings.Count);
+        }
+
+        [Test]
+        public void InvalidRegistrationDoesNotPartiallyActivateSettings()
+        {
+            SettingsService service = new SettingsService();
+            Setting<float> first = Number();
+            Setting<float> collision = Number();
+            Assert.Throws<ArgumentException>(() => Register(service, first, collision));
+            Assert.Throws<ArgumentException>(() => Register(service, first, null));
+            Assert.IsEmpty(service.GetActiveDefinitions());
+            service.Get(first);
+            Assert.Throws<ArgumentException>(() => service.Get(collision));
+        }
+
+        [Test]
+        public void ValidationRejectsNonFiniteAndWrongTypesClampsAndSuppressesDuplicateEvents()
+        {
+            SettingsService service = new SettingsService();
+            Setting<float> number = Number();
+            using IDisposable registration = Register(service, number);
+            int events = 0;
+            using IDisposable subscription = service.Observe(number, value => events++, false);
+            Assert.IsFalse(service.TrySet(number, float.NaN));
+            Assert.IsFalse(service.TrySet(number, float.PositiveInfinity));
             Assert.IsFalse(service.TrySet((SettingDefinition)number, "bad"));
-            Assert.IsTrue(service.TrySet(number, 100f)); Assert.AreEqual(10, service.Get(number));
-            service.TrySet(number, 50f); Assert.AreEqual(1, events);
-            subscription.Dispose(); service.TrySet(number, 5f); Assert.AreEqual(1, events);
+            Assert.IsTrue(service.TrySet(number, 100f));
+            Assert.AreEqual(10f, service.Get(number));
+            service.TrySet(number, 50f);
+            Assert.AreEqual(1, events);
+            subscription.Dispose();
+            service.TrySet(number, 5f);
+            Assert.AreEqual(1, events);
         }
 
-        [Test] public void InvalidRegistrationDoesNotPartiallyActivateSettings()
+        [Test]
+        public void ExistingJsonPayloadLoadsWithoutChangingStableIds()
         {
-            var service = new SettingsService(); var first = Number(); var collision = Number();
-            Assert.Throws<ArgumentException>(() => service.Register(Group(first, collision)));
-            Assert.IsFalse(service.IsActive(first));
-            var root = Group(first); root.Configure("Cycle", new[] { first }, root);
-            Assert.Throws<ArgumentException>(() => service.Register(root));
-            Assert.IsFalse(service.IsActive(first));
+            SettingsService service = new SettingsService();
+            Setting<float> number = Number("general.controls.mouse-sensitivity");
+            SettingsPreferences preferences = new SettingsPreferences
+            {
+                values = new List<SettingValueRecord>
+                {
+                    new SettingValueRecord { id = number.Id, value = "{\"value\":6.0}" }
+                }
+            };
+            service.LoadPreferences(preferences);
+            Assert.AreEqual(2f, service.Get(number));
+            using IDisposable registration = Register(service, number);
+            Assert.AreEqual(6f, service.Get(number));
+            SettingsPreferences roundTrip = JsonUtility.FromJson<SettingsPreferences>(JsonUtility.ToJson(service.ExportPreferences()));
+            SettingsService restored = new SettingsService();
+            restored.LoadPreferences(roundTrip);
+            using IDisposable restoredRegistration = Register(restored, number);
+            Assert.AreEqual(6f, restored.Get(number));
+            Assert.IsTrue(restored.Reset(number));
+            Assert.AreEqual(2f, restored.Get(number));
+            Assert.IsEmpty(restored.ExportPreferences().values);
         }
 
-        [Test] public void ConflictingDefinitionsCannotBeReadWithSameId()
+        [Test]
+        public void InvalidSavedValueFallsBackWithoutBreakingRegistration()
         {
-            var service = new SettingsService(); service.Get(Number());
-            Assert.Throws<ArgumentException>(() => service.Get(Number()));
+            SettingsService service = new SettingsService();
+            Setting<float> number = Number();
+            service.LoadPreferences(new SettingsPreferences
+            {
+                values = new List<SettingValueRecord> { new SettingValueRecord { id = number.Id, value = "broken" } }
+            });
+            using IDisposable registration = Register(service, number);
+            Assert.AreEqual(2f, service.Get(number));
         }
 
-        [Test] public void NestedGroupsActivateLeavesAndDisposeAllLeaves()
+        [Test]
+        public void ClientCannotWriteServerSettingsAndLocalRemovalDoesNotResetReplication()
         {
-            var service = new SettingsService(); var number = Number(); var nested = Group(number);
-            var root = Group(); root.Configure("Root", null, nested);
-            var module = service.Register(root); Assert.IsTrue(service.IsActive(number));
-            module.Dispose(); Assert.IsFalse(service.IsActive(number));
-        }
-
-        [Test] public void PreferencesRoundTripWhileInactiveAndResetRemovesSavedOverride()
-        {
-            var number = Number(); var group = Group(number); var original = new SettingsService();
-            using var first = original.Register(group); original.TrySet(number, 6f);
-            string json = JsonUtility.ToJson(original.ExportPreferences());
-            var loaded = new SettingsService(); loaded.LoadPreferences(JsonUtility.FromJson<SettingsPreferences>(json));
-            Assert.AreEqual(2, loaded.Get(number));
-            using var second = loaded.Register(group); Assert.AreEqual(6, loaded.Get(number));
-            Assert.IsTrue(loaded.Reset(number)); Assert.AreEqual(2, loaded.Get(number));
-            Assert.IsEmpty(loaded.ExportPreferences().values);
-        }
-
-        [Test] public void InvalidSavedValueFallsBackWithoutBreakingOtherSettings()
-        {
-            var service = new SettingsService(); var number = Number();
-            service.LoadPreferences(new SettingsPreferences { values = new() { new() { id = number.Id, value = "broken" } } });
-            using var module = service.Register(Group(number)); Assert.AreEqual(2, service.Get(number));
-        }
-
-        [Test] public void ClientsCannotWriteServerSettingsAndLocalRemovalCannotResetReplicatedValue()
-        {
-            var service = new SettingsService(SettingsRole.Client); var number = Number(scope: SettingScope.ServerSession);
-            var module = service.Register(Group(number));
-            Assert.IsFalse(service.CanWrite(number)); Assert.IsFalse(service.TrySet(number, 7f));
-            Assert.IsFalse(service.Reset(number)); Assert.IsTrue(service.ApplyServerValue(number, 8f));
-            module.Dispose(); Assert.AreEqual(8, service.Get(number));
+            SettingsService service = new SettingsService(SettingsRole.Client);
+            Setting<float> number = Number(scope: SettingScope.ServerSession);
+            IDisposable registration = Register(service, number);
+            Assert.IsFalse(service.CanWrite(number));
+            Assert.IsFalse(service.TrySet(number, 7f));
+            Assert.IsFalse(service.Reset(number));
+            Assert.IsTrue(service.ApplyServerValue(number, 8f));
+            registration.Dispose();
+            Assert.AreEqual(8f, service.Get(number));
+            Assert.IsEmpty(service.ActiveGroups);
             Assert.IsEmpty(service.ExportPreferences().values);
-            service.SetRole(SettingsRole.Standalone); Assert.AreEqual(2, service.Get(number));
+            service.SetRole(SettingsRole.Standalone);
+            Assert.AreEqual(2f, service.Get(number));
         }
 
-        [Test] public void ServerSettingsNeverPersistAndOnlyClientAdapterAcceptsReplication()
+        [Test]
+        public void ServerSettingsNeverPersistAndClientPreferencesRemainWritable()
         {
-            var service = new SettingsService(SettingsRole.Server); var number = Number(scope: SettingScope.ServerSession);
-            using var module = service.Register(Group(number)); Assert.IsTrue(service.TrySet(number, 5f));
-            Assert.IsFalse(service.ApplyServerValue(number, 9f)); Assert.IsEmpty(service.ExportPreferences().values);
+            Setting<float> serverNumber = Number("server", SettingScope.ServerSession);
+            SettingsService server = new SettingsService(SettingsRole.Server);
+            using IDisposable serverRegistration = Register(server, serverNumber);
+            Assert.IsTrue(server.TrySet(serverNumber, 5f));
+            Assert.IsFalse(server.ApplyServerValue(serverNumber, 9f));
+            Assert.IsEmpty(server.ExportPreferences().values);
+
+            Setting<float> localNumber = Number("local");
+            SettingsService client = new SettingsService(SettingsRole.Client);
+            using IDisposable localRegistration = Register(client, localNumber);
+            Assert.IsTrue(client.TrySet(localNumber, 4f));
+            Assert.AreEqual(4f, client.Get(localNumber));
         }
 
-        [Test] public void ClientLocalPreferencesRemainWritable()
+        [Test]
+        public void ChoiceDefinitionsCopyOptionsAndRejectUnknownValues()
         {
-            var service = new SettingsService(SettingsRole.Client); var number = Number();
-            using var module = service.Register(Group(number)); Assert.IsTrue(service.TrySet(number, 4f));
-            Assert.AreEqual(4, service.Get(number));
-        }
-
-        [Test] public void ChoiceValidationUsesStableStrings()
-        {
-            var choice = Asset<StringSettingDefinition>(); choice.Configure("choice", "Choice");
-            choice.SetChoices("low", "high"); choice.SetDefault("low");
-            var service = new SettingsService(); using var module = service.Register(Group(choice));
-            Assert.IsFalse(service.TrySet(choice, "unknown")); Assert.IsTrue(service.TrySet(choice, "high"));
+            string[] choices = { "low", "high" };
+            Setting<string> choice = Setting.Choice("choice", "low", choices, "Choice", "General");
+            choices[0] = "changed";
+            SettingsService service = new SettingsService();
+            using IDisposable registration = Register(service, choice);
+            Assert.AreEqual("low", service.Get(choice));
+            Assert.IsFalse(service.TrySet(choice, "changed"));
+            Assert.IsTrue(service.TrySet(choice, "high"));
             Assert.AreEqual("high", service.Get(choice));
+        }
+
+        [Test]
+        public void InvalidDefinitionsFailAtDeclaration()
+        {
+            Assert.Throws<ArgumentException>(() => Setting.Bool("", true, "Label", "General"));
+            Assert.Throws<ArgumentException>(() => Setting.Bool("id", true, "Label", "General//Camera"));
+            Assert.Throws<ArgumentException>(() => Setting.Float("id", 1f, 10f, 0f, "Label", "General"));
+            Assert.Throws<ArgumentException>(() => Setting.Float("id", float.NaN, 0f, 1f, "Label", "General"));
+            Assert.Throws<ArgumentException>(() => Setting.Choice("id", "missing", new string[] { "one" }, "Label", "General"));
+        }
+
+        public static class TestCatalog
+        {
+            public static readonly Setting<bool> Top = Setting.Bool("catalog.top", true, "Top", "General");
+            public static class Camera
+            {
+                public static readonly Setting<float> Fov = Number("catalog.fov", group: "General/Camera");
+            }
+        }
+
+        public static class InvalidCatalog
+        {
+            public static Setting<bool> Mutable = Setting.Bool("catalog.mutable", true, "Mutable", "General");
+        }
+
+        [Test]
+        public void CatalogDiscoveryIncludesNestedTypesAndDoesNotActivateThem()
+        {
+            SettingsService service = new SettingsService();
+            IReadOnlyList<SettingDefinition> definitions = SettingsCatalog.GetDefinitions(typeof(TestCatalog));
+            Assert.AreEqual(2, definitions.Count);
+            Assert.AreSame(definitions, SettingsCatalog.GetDefinitions(typeof(TestCatalog)));
+            Assert.IsEmpty(service.GetActiveDefinitions());
+            Assert.Throws<ArgumentException>(() => SettingsCatalog.GetDefinitions(typeof(InvalidCatalog)));
+            using IDisposable registration = service.Register(SettingsCatalog.GetDefinitions(typeof(TestCatalog.Camera)));
+            CollectionAssert.AreEqual(new SettingDefinition[] { TestCatalog.Camera.Fov }, service.GetActiveDefinitions());
+        }
+
+        [Test]
+        public void LinkerPreservationIncludesNestedCatalogs()
+        {
+            string xml = SettingsCatalogLinkerProcessor.BuildPreservationXml(new Type[] { typeof(TestCatalog) });
+            StringAssert.Contains(typeof(TestCatalog).FullName.Replace('+', '/'), xml);
+            StringAssert.Contains(typeof(TestCatalog.Camera).FullName.Replace('+', '/'), xml);
+            StringAssert.Contains("preserve=\"all\"", xml);
         }
     }
 }

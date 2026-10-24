@@ -1,7 +1,9 @@
 # Unreleased
 
 - Add LogService with source type/context, severity methods, category filtering, a global switch, per-call player-build opt-in, and play-session reset.
-- Add typed setting definitions, nested groups, reference-counted scene modules, validated runtime values, subscriptions, and local JSON preferences.
+- Add immutable typed settings declared in code, nested catalogs, reference-counted scene providers, validated runtime values, subscriptions, and local JSON preferences.
+- Replace per-setting ScriptableObjects with scene-local catalog activation; preserve saved preference IDs and generate linker preservation for annotated catalogs.
+- Add a dynamic FOV setting binding that restores the original camera lens immediately when disabled.
 - Add generated uGUI settings with search, advanced filtering, collapsible groups, prefab themes, and custom widget hooks.
 - Add optional server-authoritative Netcode settings synchronization and client read-only enforcement.
 - Document setup, typed catalogs, prototype additions, customization, persistence, networking, and limitations in Framework/Settings/README.md.

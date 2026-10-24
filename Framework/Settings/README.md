@@ -1,68 +1,59 @@
-# Modular settings
+# Code-defined, scene-activated settings
 
-Settings definitions are assets. Scene modules activate groups of definitions. A persistent `SettingsService` owns effective values, validates writes, and notifies consumers. The generated uGUI panel displays active groups without knowing gameplay code.
+Declare settings in C#. Add catalog-provider components to a scene-local **Settings Container** GameObject. The persistent service owns values, defaults, validation, notifications, and saved preferences. Code declarations alone never activate settings.
 
-## Getting started in this project
+## Getting started
 
-The project includes a ready-to-use catalog at `Assets/Resources/Settings/GeneralSettings.asset`:
+This project includes:
 
-```text
-General
-  Audio
-    Master volume
-    Music volume
-    Sound effects volume
-  Controls
-    Mouse sensitivity
-    Invert mouse Y
-```
+- `GeneralSettings.cs`: Audio, Controls, and Camera definitions, with typed member access.
+- `GeneralSettingsProvider`: activates all General settings, including nested catalogs.
+- `CameraSettingsProvider`: activates only General/Camera.
+- `Assets/Prefabs/Default/SettingsContainer.prefab`: scene-root container with a General provider.
+- `SettingsUI`: existing game modal using the generated settings panel.
+- `FPSCameraSettingsBinding`: connects Dynamic FOV to `FPSCameraTweaks`; included in DefaultPawn.
 
-The default GameInstance prefab and StadiumTrack scene contain a **General Settings Module** child. The existing `SettingsUI` modal now creates a generated panel. Open the settings menu as usual. Disable or remove the module child to hide its settings and revert their effective values to defaults.
+Choose **GameObject > Unscripted Engine > Settings > General Settings Container**, or drag the container prefab into your scene as a root object. For a camera-only prototype, use **Camera Settings Container** instead.
 
-For another scene:
+For an independent test menu, choose **GameObject > Unscripted Engine > Settings > Settings Preview Canvas**. This preview does not acquire gameplay input focus or unlock a gameplay-locked cursor; use the existing game modal for gameplay interaction.
 
-1. Add `Assets/Prefabs/Default/GeneralSettingsModule.prefab`, or choose **GameObject > Unscripted > Settings > General Settings Module**.
-2. Use the existing game settings modal. For an independent test panel, choose **GameObject > Unscripted > Settings > Settings Preview Canvas**.
-3. Enter Play Mode. Change a value, disable the module, then enable it again. The saved override becomes effective again when the module returns.
+StadiumTrack, FPS, and the RAGRaceSmoke test scene have been migrated to root containers. The persistent GameInstance prefab no longer contains a settings provider.
 
-Keep modules outside menu objects that are hidden or destroyed when the menu closes. Place persistent general modules under the persistent GameInstance; keep prototype modules in their prototype scenes. The preview canvas does not acquire gameplay input focus or unlock a gameplay-locked cursor; use the existing modal for in-game interaction.
+Keep containers outside persistent GameInstance objects and outside menus that are disabled when closed. Parenting a container beneath a DontDestroyOnLoad object makes it survive scene changes. Its placement determines its lifetime.
 
-Master volume drives `AudioListener.volume`. Mouse sensitivity multiplies the pawn's existing pointer sensitivity; invert Y applies to pointer input. Music and sound-effects values are exposed and saved, but need consumers wired to your game's audio mixer or audio sources.
-
-## Using settings in code
-
-Typed catalogs provide autocomplete. Their leaves are definitions, not mutable values:
+## Using settings
 
 ```csharp
-var settings = SettingsRuntime.Service;
-var generalSettings = GeneralSettingsCatalog.Current;
+SettingsService settings = SettingsRuntime.Service;
 
-float sensitivity = settings.Get(generalSettings.Controls.MouseSensitivity);
-bool accepted = settings.TrySet(generalSettings.Controls.MouseSensitivity, 1.5f);
-settings.Reset(generalSettings.Controls.MouseSensitivity);
+float sensitivity = settings.Get(GeneralSettings.Controls.MouseSensitivity);
+bool accepted = settings.TrySet(GeneralSettings.Camera.DynamicFov, false);
+settings.Reset(GeneralSettings.Camera.DynamicFov);
 ```
 
-Framework types use `UnscriptedEngine.Settings`. The General catalog is project code, not part of the reusable package.
+Use `UnscriptedEngine.Settings` for framework types. GeneralSettings is project code. Catalog members are immutable definitions; runtime values belong to the service.
 
-Consumers do not need an active module or UI to read defaults. Writes require an active module and permission for the definition's scope. `TrySet` returns false for inactive settings, invalid value types, non-finite numbers, invalid choices, or unauthorized writes. Numeric values are clamped to their authored range; text is limited to its maximum length.
+A read or subscription without an active provider returns the definition's default. Writes require an active registration and permission. Rejected writes return false. Numeric values are clamped; NaN/infinity and incorrect value types are rejected. Choice values must match their authored strings.
 
-Subscribe once and apply the current value immediately:
+A small consumer can observe a definition:
 
 ```csharp
 using System;
 using UnityEngine;
+using UnscriptedEngine;
 using UnscriptedEngine.Settings;
 
-public sealed class ExampleSettingsConsumer : MonoBehaviour
+[RequireComponent(typeof(FPSCameraTweaks))]
+public sealed class ExampleCameraBinding : MonoBehaviour
 {
-    [SerializeField] private FloatSettingDefinition springStrength;
     private IDisposable subscription;
-    private float strength;
 
     private void OnEnable()
     {
+        FPSCameraTweaks cameraTweaks = GetComponent<FPSCameraTweaks>();
         subscription = SettingsRuntime.Service.Observe(
-            springStrength, value => strength = value);
+            GeneralSettings.Camera.DynamicFov,
+            cameraTweaks.SetDynamicFovEnabled);
     }
 
     private void OnDisable()
@@ -73,83 +64,152 @@ public sealed class ExampleSettingsConsumer : MonoBehaviour
 }
 ```
 
-`Observe` emits the current effective value by default. Set `emitCurrent: false` for change-only observation. Equal effective values do not generate notifications. Dispose subscriptions when their owner stops using them. Unity-object consumers should unsubscribe before destruction.
+The project already supplies this binding as FPSCameraSettingsBinding; do not add both. It changes only dynamic FOV, leaving head bob, tilt, and shake intact. Disabling dynamic FOV restores the captured original lens values immediately.
 
-Polling `Get` is also appropriate when processing an input event. Every write must pass through the service; do not mutate definition assets to change runtime values.
+Observe applies the current effective value immediately by default, then reports changes. Pass `emitCurrent: false` for change-only observation. Equal effective values do not notify. Dispose subscriptions when the consumer stops using them. Polling Get while handling input is also supported.
 
-## Appending your own settings
+## Appending your own prototype
 
-1. Create a prototype folder, for example `Assets/Prototypes/Grapple/Settings`.
-2. Choose **Create > Unscripted Engine > Settings > Float**, **Integer**, **Boolean**, or **Text or Choice**.
-3. Give the definition a permanent ID such as `grapple.experimental.spring-strength`, a display name, default, and range. Set its scope and optional description, editor hint, advanced flag, and sort order.
-4. Create an **Experimental** group containing the definition. Create a **Grapple Prototype** group with Experimental in its Children list.
-5. Add `SettingsModule` to a scene object and assign the Grapple Prototype group.
-6. Reference the definition from a consumer and use `Get`, `TrySet`, or `Observe`.
+Create a catalog in the prototype's scripts folder:
 
-The panel discovers the module, builds nested collapsible groups, and hides empty groups. Search matches labels, descriptions, IDs, and group paths. Advanced definitions remain hidden until **Show advanced settings** is enabled. Closing a group only collapses its UI; it does not deactivate settings.
+```csharp
+using UnscriptedEngine.Settings;
 
-Use unique IDs across the application. Labels and UI grouping can change without changing saved identity. Changing an ID creates a new preference; renaming IDs requires an explicit migration. Two different definition assets with the same ID are rejected, including when read without a module. Reusing the same definition in multiple modules is supported.
+[SettingsCatalogRoot]
+public static class GrappleSettings
+{
+    public static class Experimental
+    {
+        public static readonly Setting<bool> PreserveMomentum = Setting.Bool(
+            id: "grapple.experimental.preserve-momentum",
+            defaultValue: true,
+            label: "Preserve momentum",
+            group: "Grapple/Experimental",
+            description: "Keep existing velocity when releasing the grapple.");
 
-Group cycles and missing references are rejected before activation. Lists are authored configuration: change them outside Play Mode. To switch a running module, call `module.SetGroup(otherGroup)`.
+        public static readonly Setting<float> RopeLength = Setting.Float(
+            id: "grapple.experimental.rope-length",
+            defaultValue: 20f,
+            min: 1f,
+            max: 100f,
+            label: "Rope length",
+            group: "Grapple/Experimental",
+            description: "Maximum rope length in world units.");
+    }
+}
+```
 
-### Optional typed prototype catalogs
-
-Asset-only definitions need no central registration code. For convenient dot access, add a small catalog:
+Create its provider in a matching `GrappleSettingsProvider.cs` file:
 
 ```csharp
 using System;
 using UnityEngine;
 using UnscriptedEngine.Settings;
 
-[CreateAssetMenu(menuName = "Prototypes/Grapple Settings Catalog")]
-public sealed class GrappleSettingsCatalog : ScriptableObject
+[AddComponentMenu("Unscripted Engine/Settings/Grapple Settings Provider")]
+public sealed class GrappleSettingsProvider : SettingsProvider
 {
-    [Serializable]
-    public sealed class ExperimentalSettings
-    {
-        public FloatSettingDefinition SpringStrength;
-        public BoolSettingDefinition PreserveMomentum;
-    }
-
-    public SettingsGroup Root;
-    public ExperimentalSettings Experimental;
+    protected override Type CatalogType => typeof(GrappleSettings);
 }
 ```
 
-Assign the same definition assets to the catalog and its groups. Then read `settings.Get(grappleSettings.Experimental.SpringStrength)`. C# member access comes from authored fields; Inspector names do not generate C# properties. Catalog references do not activate settings; a module still controls activation.
+Add this component to Prototype 1's Settings Container. Add a Racing provider to Prototype 2's container instead. Adding another static readonly declaration to GrappleSettings requires no new asset, Inspector reference, or provider change.
 
-## Removal, defaults, and persistence
+Consumers access `GrappleSettings.Experimental.RopeLength`. UI grouping comes from `group: "Grapple/Experimental"`, independently of C# nesting. Moving a declaration in C# or changing its UI group does not change saved identity.
 
-| State | Effective local value | UI |
+Each field must be **public static readonly**. Providers discover only their explicitly selected type and public nested types. No assembly-wide runtime scan or automatic global registration occurs. Discovery results are cached. Mutable or null definition fields and conflicting IDs are rejected.
+
+Use `[SettingsCatalogRoot]` on each outer catalog. The package's editor linker processor preserves that catalog and its nested types in player builds. This prevents reflection-only declarations being stripped. The attribute does not activate settings. Alternatively, override GetDefinitions to return an explicitly constructed read-only collection with direct references, avoiding reflected discovery.
+
+## Declaration options
+
+| Factory | Value | Additional arguments |
 |---|---|---|
-| No active module | Definition default | Hidden |
-| Active, no override | Definition default | Visible |
-| Active, valid saved override | Saved override | Visible |
-| Last registration removed | Definition default; notify if changed | Removed |
-| Module returns | Retained override | Visible |
+| Setting.Bool | bool | defaultValue |
+| Setting.Float | float | defaultValue, min, max |
+| Setting.Int | int | defaultValue, min, max |
+| Setting.Text | string | defaultValue, optional maxLength |
+| Setting.Choice | string | defaultValue, choices |
 
-Registrations are reference-counted. Removing one owner does not deactivate settings still owned by another. Disposal is idempotent. Reset removes the stored override, so future default changes take effect.
+Every factory takes a permanent ID, label, and slash-separated group path. Optional arguments: description, scope, editorHint, advanced, and order.
 
-The runtime saves local preferences to `Application.persistentDataPath/Settings.v2.json` through the existing versioned `JsonSettingsStore`. Changed preferences are saved at most every two seconds, when a panel closes, on application pause, and on quit. Call `SettingsRuntime.Save()` for an explicit checkpoint. Failure leaves the dirty flag set for a later retry. Storage uses temporary-file replacement.
+- IDs must be application-wide unique. Reuse the same static declaration when sharing settings.
+- Defaults must be valid. Numeric defaults are normalized within the authored range.
+- Group paths cannot contain empty sections. Groups are built from active definitions and merged by exact path.
+- Groups sort alphabetically. Settings sort by order, then label.
+- Advanced hides a row until Show advanced settings is enabled; it does not deactivate the value.
+- Editor hints select custom theme widgets without changing value type.
+- Choice strings are saved as values, not indices. Reordering is safe; renaming a choice needs migration.
 
-Unknown IDs are retained to preserve preferences for temporarily absent prototypes. Deleting a prototype does not automatically purge its saved preferences. Invalid known values fall back to defaults. Unsupported file schema versions are rejected by the JSON store. The store does not implement automatic migrations between arbitrary future schemas.
+For example:
 
-The project imports the old `GameSettings.json` into stable IDs when no v2 file exists. The old file remains untouched. The legacy GameSettings asset is only an import seed; edit the new definition assets to change defaults. Imported sensitivity is clamped to the new authored 0.01–10 range.
+```csharp
+public static readonly Setting<string> Difficulty = Setting.Choice(
+    id: "racing.session.difficulty",
+    defaultValue: "normal",
+    choices: new string[] { "easy", "normal", "hard" },
+    label: "Difficulty",
+    group: "Racing/Rules",
+    scope: SettingScope.ServerSession);
+```
+
+Ordinary gameplay fields remain separate. Declarations do not automatically find component fields with similar names. A binding, subscription, or Get call connects the preference to behavior.
+
+## Scene lifetime and defaults
+
+| State | Local effective value | UI |
+|---|---|---|
+| Definition referenced but no provider | Default | Hidden |
+| Provider active, no saved override | Default | Visible |
+| Provider active, saved override exists | Validated saved value | Visible |
+| Last provider disabled or unloaded | Default; notify if changed | Removed |
+| Provider returns | Retained override | Visible |
+
+Scene providers register on enable and unregister on disable/destruction. They do not make themselves persistent. Disabling a whole container disables all its providers.
+
+Registrations are reference-counted. In additive scenes, both sets remain active. Unloading one scene leaves shared definitions active if another scene still registers them. UI merges shared category paths and displays a definition once even when multiple providers register it.
+
+Referencing inactive settings in code does not bring their UI back. Collapse/search controls affect visibility only. Returning to a scene restores its preferences without keeping its container alive.
+
+ServerSession values are an exception on clients: removing a local provider hides their UI but cannot reset replicated authoritative rules.
+
+## Persistence and migration
+
+The filename remains `Application.persistentDataPath/Settings.v2.json`. The existing JsonSettingsStore envelope and per-value JSON payload are unchanged. The five original General IDs and defaults are preserved, so existing preferences load without conversion. Dynamic FOV adds `general.camera.dynamic-fov`, default true.
+
+The service saves local overrides every two seconds while dirty, when the panel closes, on pause, and on quit. Call SettingsRuntime.Save for an explicit checkpoint. Writes use temporary-file replacement; failed saves remain dirty for retry. ServerSession overrides are not local preferences.
+
+Reset removes the saved override. Removing a provider keeps it for later reuse. Unknown IDs remain in the file so temporarily absent prototypes keep their preferences. Arbitrary ID renames and future schema versions still require explicit migrations.
+
+DefaultGameInstance still imports old GameSettings.json when no v2 file exists. Its legacy GameSettings asset is only an import seed. Edit GeneralSettings.cs to change current defaults.
+
+The old per-setting/group assets and old catalog/module scripts were moved outside Unity's imported Assets tree into `Documentation/SettingsMigration/LegacyAssets`. The two unconfigured RubixCore drafts were preserved there too. The draft group had no entries and the draft float had no ID; no active prototype settings were inferred from them.
+
+API migration:
+- Replace SettingDefinition<T> with Setting<T>.
+- Replace asset references with static catalog members.
+- Replace SettingsModule/SetGroup with concrete SettingsProvider components.
+- Register now accepts IEnumerable<SettingDefinition>.
+- SettingsGroup is a runtime UI tree, not a ScriptableObject.
+- Theme exact matches use Setting Id instead of definition asset references.
+- Old GeneralSettingsCatalog.Current references become GeneralSettings static references.
+- The former GeneralSettingsModule prefab is now SettingsContainer; its prefab GUID is retained.
 
 ## Customization and extending
 
-### Themes and custom controls
+### Theme widgets
 
-Create **Unscripted Engine > Settings > UI Theme** and assign it to `SettingsUI` or `GeneratedSettingsPanel`. Each mapping selects a prefab containing a `SettingsWidget` subclass. Selection order is:
+Create **Unscripted Engine > Settings > UI Theme** and assign it to SettingsUI or GeneratedSettingsPanel. Theme assets remain useful because they reference visual prefabs; settings themselves no longer need assets.
 
-1. An exact definition reference.
-2. A matching nonempty editor hint, with no definition reference.
-3. A value-kind mapping, with neither definition nor editor hint.
-4. The built-in template control if no mapping matches.
+Mapping priority:
+1. Exact Setting Id.
+2. Nonempty Editor Hint, with Setting Id empty.
+3. Kind, with both ID and hint empty.
+4. Built-in template control.
 
-First matching entry within each tier wins. This lets one setting use a custom editor without affecting other settings of the same type. Built-in kinds are Boolean, Float, Integer, Text, Choice, and Custom. A string definition with nonempty Choices uses a dropdown; choices are saved as strings, not array indices.
+The first match in each tier wins. Custom prefabs derive from SettingsWidget. OnBound configures labels/listeners; DisplayValue refreshes without triggering UI change events; OnUnbound removes listeners owned by that widget. Use Write to request changes through validation and permissions. The base widget manages subscriptions across disable/enable and retains the project's UWidgetComponent message behavior.
 
-Example prefab component:
+Example custom Boolean widget:
 
 ```csharp
 using UnityEngine;
@@ -158,7 +218,8 @@ using UnscriptedEngine.UI.Settings;
 
 public sealed class CustomBoolSettingsWidget : SettingsWidget
 {
-    [SerializeField] private Toggle toggle;
+    [SerializeField, Tooltip("Toggle used to edit the bound Boolean setting.")]
+    private Toggle toggle;
 
     protected override void OnBound()
     {
@@ -167,68 +228,65 @@ public sealed class CustomBoolSettingsWidget : SettingsWidget
     }
 
     protected override void DisplayValue(object value)
-        => toggle.SetIsOnWithoutNotify((bool)value);
+    {
+        toggle.SetIsOnWithoutNotify((bool)value);
+    }
 
     private void ChangeValue(bool value) => Write(value);
 
     protected override void OnUnbound()
-        => toggle.onValueChanged.RemoveListener(ChangeValue);
+    {
+        toggle.onValueChanged.RemoveListener(ChangeValue);
+    }
 }
 ```
 
-The base widget manages value subscriptions, including disable/re-enable. `OnUnbound` must remove listeners owned by your widget. Do not remove unrelated listeners. Refresh controls without notification to avoid write loops. `Write` always refreshes the displayed effective value, including when a write is rejected.
+Provide Content on GeneratedSettingsPanel to use a custom shell. It needs suitable layout and scroll sizing. Wire custom filters to SetSearch and SetShowAdvanced. Without Content, the template builds its own shell. Theme mappings replace rows; replace/extend the panel for custom category navigation.
 
-The template shell includes search, advanced visibility, scrolling, and collapsible headings. To replace its shell, provide a custom Content RectTransform on `GeneratedSettingsPanel` and wire your own search/advanced controls to `SetSearch` and `SetShowAdvanced`. Content needs a suitable layout group and, inside a ScrollRect, a content size fitter. Theme mappings replace setting rows, not group headings. Replace or extend the panel for a fully bespoke navigation layout.
+### New types and adapters
 
-### New value types
+Derive a concrete immutable definition from Setting<T> for additional value types. Supply DefaultValue, normalization, validation, and a matching widget. Override serialization for types unsupported by JsonUtility. Preserve the serialized contract if changing an existing type.
 
-Create a concrete `SettingDefinition<T>` subclass for serializable values. Implement normalization and validity rules; override serialization when JsonUtility cannot represent the type. Provide a matching custom widget. Runtime values should be immutable values or immutable snapshots; mutating an object obtained through `Get` bypasses notification and is unsupported.
+Prefer immutable value types or immutable snapshots. Mutating a reference returned by Get bypasses validation and notifications.
 
-Keep stable IDs independent from labels and group hierarchy. Service validation is the shared boundary for UI, console commands, file imports, and transport adapters. Theme controls may offer stricter interaction affordances but cannot replace service validation.
+Construct an isolated SettingsService for tests or custom ownership. ExportPreferences and LoadPreferences form the storage boundary. LoadPreferences replaces the preference set. Merge first for partial imports. SettingsRuntime.ImportPreferences marks the global runtime dirty for saving.
 
-### Alternative storage or service ownership
-
-Construct `new SettingsService()` for tests or an explicitly owned service. `ExportPreferences` and `LoadPreferences` provide the adapter boundary. `LoadPreferences` replaces the full preference set; merge first if importing only some settings. It does not mark the global runtime dirty. Use `SettingsRuntime.ImportPreferences` when importing into the global service and saving afterward.
-
-The supplied modules and panel use `SettingsRuntime.Service`. Dependency injection for multiple simultaneous profiles requires custom module/panel adapters. Definition and group assets are shared metadata, not the storage backend.
+The provided scene providers and UI use SettingsRuntime.Service. Multiple simultaneous local profiles need explicit service injection/custom adapters.
 
 ## Server-sided settings
 
-Set a definition's scope to **ServerSession**. Its values are never saved as local user preferences. The server/host can write active settings; clients display them read-only and `TrySet` rejects changes even if called outside UI.
+LocalUser is the default scope. Set ServerSession for server-controlled match rules. The service rejects client writes even outside the UI.
 
-For Netcode for GameObjects:
+The optional Netcode SettingsNetworkBridge uses **Catalog Providers** instead of group assets:
 
-1. Add one `SettingsNetworkBridge` to a server-owned NetworkObject that lives for the session and is visible to every client.
-2. Assign all groups containing server settings to its Catalogs list on both server and client builds. These catalogs define the known schema; they do not activate settings.
-3. Spawn the object through your existing network bootstrap. Keep it alive across scene transitions, using your game's persistent network-object setup.
-4. Activate rule overrides with server-side scene modules. Use identical IDs/types/ranges/defaults on all peers.
+1. Create one server-owned, session-persistent NetworkObject with SettingsNetworkBridge.
+2. Add disabled provider components that cover the complete server schema, including settings used by future scenes.
+3. Assign those components to Catalog Providers on every peer.
+4. Spawn the bridge using the game's network bootstrap.
+5. Add enabled scene providers to activate actual rule overrides.
 
-The bridge sets the service role, sends initial values to joining clients, and replicates later effective-value changes. Only the server sends authoritative value RPCs. There is no client write-request RPC; a client can request only a current snapshot. Add a separate, permission-checked server command if you later need remote administrator edits.
+The bridge reads schema from disabled providers without activating them. Server scene providers control effective overrides. The bridge caches schema at spawn, sends current values to late joiners, and replicates later changes. There is no client write RPC; clients can request only an initial snapshot.
 
-Removing a client's local UI module cannot reset replicated server rules. Removing the final server module resets effective values to defaults and broadcasts those defaults. Despawning the bridge returns to standalone mode and clears session overrides. Local preferences remain intact.
+Removing the final server registration restores defaults and broadcasts them. Removing a client registration only hides UI. Despawning the bridge clears session overrides and returns to standalone mode; local preferences survive.
 
-Before the bridge spawns, the service is standalone. If client bootstrap can expose gameplay or settings before network spawn, call `SetRole(SettingsRole.Client)` when joining starts and restore standalone on connection failure. Do not enable authoritative gameplay until required initial settings arrive; the basic bridge sends individual values and does not provide a snapshot-ready barrier. Multiple bridges or multiple network sessions sharing the same static service are unsupported.
+Before bridge spawn the service is standalone. If a joining client can expose gameplay/settings early, set Client role when joining begins and restore Standalone on failure. Initial values arrive individually; the bridge has no snapshot-ready barrier. Gate gameplay appropriately in your connection flow.
 
-For another transport, set the role during connection setup, authenticate the server sender, deserialize against known definitions, and call `ApplyServerValue`. That method is an integration hook, not a security boundary against arbitrary local code. Gameplay rules must be enforced on the actual authoritative server.
+For another transport, authenticate server messages before calling ApplyServerValue. That method is a transport integration hook, not protection against arbitrary local code. Enforce rules on the actual server.
 
-## Limitations and deliberate scope
+## Limitations
 
-- All service operations and callbacks run on Unity's main thread. Marshal background/network worker results before calling them.
-- Scene reload must remain enabled when domain reload is disabled. Disabling both reloads is unsupported.
-- Changes apply immediately. No draft/apply/cancel transaction, restart-required policy, or graphics rollback timer is supplied.
-- Numeric defaults/ranges must be sensible and finite. Integer sliders use uGUI floats; use a custom integer input for values beyond exact float integer precision.
-- The template uses legacy uGUI Text and the built-in font. It is a functional prototype, not a localized or accessibility-audited production menu. Localized labels, controller focus restoration after rebuilds, and specialized key-binding capture need custom UI.
-- Theme prefabs should have suitable RectTransforms/layout components. Unknown custom value types display a missing-editor message until mapped.
-- The panel rebuilds after structural/search changes. Very large catalogs need virtualization; definitions intentionally shared across visible groups can appear in more than one location.
-- No general reflection-based registration, generated C# catalogs, arbitrary asset hot-editing during Play Mode, cross-setting dependency system, or automatic ID migration.
-- The basic network bridge is suitable for small settings catalogs. It has no batching, revision protocol, host migration, client admin requests, or synchronized apply transaction.
-- Saving depends on filesystem replacement support on the target platform. The current adapter targets the existing desktop-style JSON storage path.
-- Music/SFX routing belongs to your game. Stored values alone do not configure an AudioMixer.
+- Definition/default changes require recompilation. No automatic properties from Inspector labels or gameplay fields.
+- Main-thread service only. Marshal background results to Unity's main thread.
+- Keep scene reload enabled when disabling domain reload. Disabling both reloads is unsupported.
+- No apply/cancel transaction, cross-setting dependency engine, restart policy, or graphics rollback timer.
+- The template uses legacy uGUI Text and the built-in font. Localization, accessibility, custom key binding, and production UI polish remain extension work.
+- Structural/filter changes rebuild rows. Very large catalogs need virtualization and deliberate focus restoration.
+- Integer sliders use floats internally. Use a custom editor beyond exact float integer precision.
+- Music/SFX preferences need game-specific audio routing; master volume and pointer controls are already connected.
+- The basic network bridge has no batching, versioned snapshots, host migration, client-admin request flow, or multiple-session support.
+- File replacement support must be verified on each target platform.
+- Preserved metadata generation is tested; an IL2CPP player build and end-to-end multiplayer remain separate validation.
 
 ## Validation
 
-`SettingsServiceTests` covers inactive defaults, owner removal/reactivation, overlapping groups, validation, subscription disposal, duplicate IDs, nested groups/cycles, JSON round trips, resets, choices, and client authority. `SettingsWidgetTests` enters Play Mode and covers editable numeric controls, invalid text, reset, disable/re-enable subscriptions, read-only replicated choices, rebinding, advanced filtering, search, and live module removal.
-
-Validated with Unity 6000.4.8f1 in an isolated consumer project: all 17 settings tests passed. General catalog defaults and prefab references were imported and checked; the generated panel was rendered and visually inspected. Project runtime scripts also compiled against the updated framework. This does not establish end-to-end multiplayer transport behavior or every target platform.
-
-In Unity Test Runner, run the two fixtures in Edit Mode. Network transport integration and target-platform visual/input behavior should also be checked in the actual game: connect a late client, change a server rule, remove its client UI module, remove its server module, and disconnect. Confirm that only the server controls the rule and that local preferences survive.
+Run SettingsServiceTests and SettingsWidgetTests in Unity's Edit Mode test runner. UI tests enter Play Mode. Coverage includes nested catalog discovery, default-only reads, duplicate IDs, shared categories, range/type validation, legacy JSON payloads, resets, role restrictions, real additive scene unloads, override restoration, widget subscriptions, search, and advanced filtering.

@@ -5,72 +5,80 @@ using UnityEngine;
 
 namespace UnscriptedEngine.Settings
 {
-    /// <summary>
-    /// Optional Netcode for GameObjects adapter. Spawn one server-owned persistent NetworkObject.
-    /// Catalogs identify known server settings; they do not activate them or expose them in the UI.
-    /// </summary>
+    /// <summary>One server-owned, session-persistent bridge. Schema providers do not need to be enabled.</summary>
     [RequireComponent(typeof(NetworkObject))]
     public sealed class SettingsNetworkBridge : NetworkBehaviour
     {
-        [SerializeField, Tooltip("Schema of all ServerSession settings this bridge synchronizes, including nested groups. Assign matching definitions on server and clients. These references do not activate settings; modules do. Use one server-owned bridge per session.")]
-        private List<SettingsGroup> catalogs = new();
-        private readonly Dictionary<string, SettingDefinition> definitions = new(StringComparer.Ordinal);
+        [SerializeField, Tooltip("Providers declaring the complete server-setting schema, including catalogs used by later scenes. Use disabled provider components on a persistent object for schema only. Matching catalogs must exist on every peer. Reading these references does not activate settings.")]
+        private SettingsProvider[] catalogProviders = Array.Empty<SettingsProvider>();
+        private readonly Dictionary<string, SettingDefinition> definitions =
+            new Dictionary<string, SettingDefinition>(StringComparer.Ordinal);
         private SettingsService service;
         private bool bound;
 
         public override void OnNetworkSpawn()
         {
+            CollectServerDefinitions();
+            BindService();
+            if (!IsServer) RequestSnapshotServerRpc();
+        }
+
+        private void CollectServerDefinitions()
+        {
             definitions.Clear();
-            foreach (var catalog in catalogs)
-            foreach (var definition in catalog.Flatten())
+            foreach (SettingsProvider provider in catalogProviders)
             {
-                if (definition.Scope != SettingScope.ServerSession) continue;
-                if (definitions.TryGetValue(definition.Id, out var existing) && existing != definition)
-                    throw new ArgumentException($"Duplicate network setting ID '{definition.Id}'.");
-                definitions[definition.Id] = definition;
+                if (provider == null) throw new ArgumentException("Network catalog provider is missing.");
+                foreach (SettingDefinition definition in provider.GetDefinitions())
+                {
+                    if (definition.Scope != SettingScope.ServerSession) continue;
+                    if (definitions.TryGetValue(definition.Id, out SettingDefinition existing) &&
+                        !ReferenceEquals(existing, definition))
+                        throw new ArgumentException($"Duplicate network setting ID '{definition.Id}'.");
+                    definitions[definition.Id] = definition;
+                }
             }
+        }
+
+        private void BindService()
+        {
             service = SettingsRuntime.Service;
             service.SetRole(IsServer ? SettingsRole.Server : SettingsRole.Client);
-            foreach (var definition in definitions.Values) service.Get(definition);
+            foreach (SettingDefinition definition in definitions.Values) service.Get(definition);
             if (IsServer) service.ValueChanged += HandleValueChanged;
             bound = true;
-            if (!IsServer) RequestSnapshotServerRpc();
         }
 
         public override void OnNetworkDespawn()
         {
             if (!bound) return;
-            if (service != null)
-            {
-                service.ValueChanged -= HandleValueChanged;
-                service.SetRole(SettingsRole.Standalone);
-            }
+            service.ValueChanged -= HandleValueChanged;
+            service.SetRole(SettingsRole.Standalone);
             bound = false;
         }
 
         private void HandleValueChanged(SettingDefinition definition, object value)
         {
-            if (IsSpawned && definition.Scope == SettingScope.ServerSession && definitions.ContainsKey(definition.Id))
-                ReceiveValueClientRpc(definition.Id, definition.SerializeValue(value));
+            if (!IsSpawned || definition.Scope != SettingScope.ServerSession || !definitions.ContainsKey(definition.Id)) return;
+            ReceiveValueClientRpc(definition.Id, definition.SerializeValue(value));
         }
 
         [ServerRpc(RequireOwnership = false)]
         private void RequestSnapshotServerRpc(ServerRpcParams rpc = default)
         {
-            var target = new ClientRpcParams
+            ClientRpcParams target = new ClientRpcParams
             {
-                Send = new ClientRpcSendParams { TargetClientIds = new[] { rpc.Receive.SenderClientId } }
+                Send = new ClientRpcSendParams { TargetClientIds = new ulong[] { rpc.Receive.SenderClientId } }
             };
-            // Values, including defaults for inactive settings, are sent to each joining client.
-            foreach (var definition in definitions.Values)
+            foreach (SettingDefinition definition in definitions.Values)
                 ReceiveValueClientRpc(definition.Id, definition.SerializeValue(service.Get(definition)), target);
         }
 
         [ClientRpc]
         private void ReceiveValueClientRpc(string id, string json, ClientRpcParams rpc = default)
         {
-            if (IsServer || service == null || !definitions.TryGetValue(id, out var definition)) return;
-            if (definition.TryDeserializeValue(json, out var value)) service.ApplyServerValue(definition, value);
+            if (IsServer || service == null || !definitions.TryGetValue(id, out SettingDefinition definition)) return;
+            if (definition.TryDeserializeValue(json, out object value)) service.ApplyServerValue(definition, value);
         }
     }
 }

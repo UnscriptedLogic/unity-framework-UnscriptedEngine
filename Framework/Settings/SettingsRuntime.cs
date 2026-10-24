@@ -16,7 +16,7 @@ namespace UnscriptedEngine.Settings
             {
                 if (service != null) return service;
                 service = new SettingsService();
-                var preferences = new SettingsPreferences();
+                SettingsPreferences preferences = new SettingsPreferences();
                 try { new JsonSettingsStore(FilePath).LoadInto(preferences); service.LoadPreferences(preferences); }
                 catch (Exception e) when (e is IOException || e is UnauthorizedAccessException || e is ArgumentException)
                 { Debug.LogWarning($"Could not load settings. Using defaults. {e.Message}"); }
@@ -32,7 +32,7 @@ namespace UnscriptedEngine.Settings
         private static void Initialize()
         {
             _ = Service;
-            var host = new GameObject("Settings Persistence");
+            GameObject host = new GameObject("Settings Persistence");
             UnityEngine.Object.DontDestroyOnLoad(host);
             host.AddComponent<SettingsPersistenceDriver>();
         }

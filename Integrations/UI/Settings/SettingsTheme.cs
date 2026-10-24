@@ -13,29 +13,53 @@ namespace UnscriptedEngine.UI.Settings
         [Serializable]
         public sealed class Mapping
         {
-            [Tooltip("Optional exact definition to customize. When assigned, this mapping ignores Editor Hint and Kind and takes priority over hint/type mappings.")]
-            public SettingDefinition setting;
-            [Tooltip("Match a definition's Editor Hint exactly. Used only when Setting is empty. A nonempty hint takes priority over Kind mappings.")]
+            [Tooltip("Optional exact stable ID, e.g. general.camera.dynamic-fov. Takes priority over Editor Hint and Kind; leave empty for a broader match.")]
+            public string settingId;
+            [Tooltip("Match the code definition's EditorHint exactly when Setting Id is empty. Takes priority over Kind.")]
             public string editorHint;
-            [Tooltip("Value/editor category to match when both Setting and Editor Hint are empty. Choice means a string definition with a nonempty Choices list.")]
+            [Tooltip("Used when Setting Id and Editor Hint are empty. Choice means a string setting with a fixed list of values.")]
             public SettingWidgetKind kind;
-            [Tooltip("Prefab containing a SettingsWidget subclass and suitable UI layout components. The panel instantiates and binds it. Empty prefab references are skipped.")]
+            [Tooltip("Prefab containing a SettingsWidget subclass and suitable layout components. Empty prefab references are skipped.")]
             public SettingsWidget prefab;
         }
-        [SerializeField, Tooltip("Custom widget selection rules. Exact Setting matches win, then Editor Hint, then Kind. Within each tier the first matching entry wins. Unmatched settings use built-in template controls.")]
-        private List<Mapping> mappings = new();
+
+        [SerializeField, Tooltip("Exact setting IDs win, then editor hints, then value kinds. The first matching entry in each tier wins. Unmatched settings use template controls.")]
+        private List<Mapping> mappings = new List<Mapping>();
+
         public SettingsWidget Resolve(SettingDefinition definition)
         {
-            foreach (var mapping in mappings)
-                if (mapping != null && mapping.prefab != null && mapping.setting == definition) return mapping.prefab;
-            foreach (var mapping in mappings)
-                if (mapping != null && mapping.prefab != null && mapping.setting == null &&
-                    !string.IsNullOrEmpty(mapping.editorHint) && mapping.editorHint == definition.EditorHint) return mapping.prefab;
-            foreach (var mapping in mappings)
-                if (mapping != null && mapping.prefab != null && mapping.setting == null &&
-                    string.IsNullOrEmpty(mapping.editorHint) && mapping.kind == KindOf(definition)) return mapping.prefab;
+            SettingsWidget exactMatch = FindExactMapping(definition.Id);
+            if (exactMatch != null) return exactMatch;
+            SettingsWidget hintMatch = FindHintMapping(definition.EditorHint);
+            return hintMatch != null ? hintMatch : FindKindMapping(KindOf(definition));
+        }
+
+        private SettingsWidget FindExactMapping(string id)
+        {
+            foreach (Mapping mapping in mappings)
+                if (IsUsable(mapping) && mapping.settingId == id) return mapping.prefab;
             return null;
         }
+
+        private SettingsWidget FindHintMapping(string hint)
+        {
+            if (string.IsNullOrEmpty(hint)) return null;
+            foreach (Mapping mapping in mappings)
+                if (IsUsable(mapping) && string.IsNullOrEmpty(mapping.settingId) &&
+                    mapping.editorHint == hint) return mapping.prefab;
+            return null;
+        }
+
+        private SettingsWidget FindKindMapping(SettingWidgetKind kind)
+        {
+            foreach (Mapping mapping in mappings)
+                if (IsUsable(mapping) && string.IsNullOrEmpty(mapping.settingId) &&
+                    string.IsNullOrEmpty(mapping.editorHint) && mapping.kind == kind) return mapping.prefab;
+            return null;
+        }
+
+        private static bool IsUsable(Mapping mapping) => mapping != null && mapping.prefab != null;
+
         public static SettingWidgetKind KindOf(SettingDefinition definition)
         {
             if (definition is BoolSettingDefinition) return SettingWidgetKind.Boolean;

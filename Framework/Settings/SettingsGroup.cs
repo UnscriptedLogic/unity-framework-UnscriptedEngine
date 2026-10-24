@@ -1,50 +1,48 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
+using System.Linq;
 
 namespace UnscriptedEngine.Settings
 {
-    [CreateAssetMenu(menuName = "Unscripted Engine/Settings/Group")]
-    public sealed class SettingsGroup : ScriptableObject
+    /// <summary>Runtime UI projection of active code definitions. Not an authored asset.</summary>
+    public sealed class SettingsGroup
     {
-        [SerializeField, Tooltip("Collapsible section label in the generated UI. Uses the asset name when empty. Renaming the group does not change setting IDs or preferences.")]
-        private string displayName;
-        [SerializeField, Tooltip("Display priority among sibling groups or active root groups. Lower numbers appear first; ties are sorted by display name.")]
-        private int order;
-        [SerializeField, Tooltip("Definitions displayed directly in this section. A module activates them together with all child groups. Assign existing definition assets; missing references and conflicting IDs are rejected.")]
-        private List<SettingDefinition> settings = new();
-        [SerializeField, Tooltip("Nested sections, e.g. Controls inside General. A module activates the entire tree. Do not reference this group or any ancestor; cycles and missing references are rejected.")]
-        private List<SettingsGroup> children = new();
-        public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? name : displayName;
-        public int Order => order;
-        public IReadOnlyList<SettingDefinition> Settings => settings;
-        public IReadOnlyList<SettingsGroup> Children => children;
-        public void Configure(string label, IEnumerable<SettingDefinition> entries, params SettingsGroup[] groups)
+        private readonly List<SettingDefinition> settings = new List<SettingDefinition>();
+        private readonly List<SettingsGroup> children = new List<SettingsGroup>();
+        public string DisplayName { get; }
+        public string Path { get; }
+        public IReadOnlyList<SettingDefinition> Settings => settings.AsReadOnly();
+        public IReadOnlyList<SettingsGroup> Children => children.AsReadOnly();
+
+        private SettingsGroup(string displayName, string path)
         {
-            displayName = label;
-            settings = entries == null ? new() : new(entries);
-            children = groups == null ? new() : new(groups);
+            DisplayName = displayName;
+            Path = path;
         }
 
-        public List<SettingDefinition> Flatten()
+        public static IReadOnlyList<SettingsGroup> BuildTree(IEnumerable<SettingDefinition> definitions)
         {
-            var result = new List<SettingDefinition>();
-            Visit(this, new HashSet<SettingsGroup>(), new HashSet<SettingDefinition>(), result);
-            return result;
-        }
-
-        private static void Visit(SettingsGroup group, HashSet<SettingsGroup> path,
-            HashSet<SettingDefinition> seen, List<SettingDefinition> result)
-        {
-            if (group == null) throw new ArgumentException("Settings groups cannot contain missing child references.");
-            if (!path.Add(group)) throw new ArgumentException($"Settings group cycle at '{group.name}'.");
-            foreach (var setting in group.settings)
+            Dictionary<string, SettingsGroup> groups = new Dictionary<string, SettingsGroup>(StringComparer.Ordinal);
+            List<SettingsGroup> roots = new List<SettingsGroup>();
+            foreach (SettingDefinition definition in definitions)
             {
-                if (setting == null) throw new ArgumentException($"Missing setting in '{group.name}'.");
-                if (seen.Add(setting)) result.Add(setting);
+                SettingsGroup parent = null;
+                string path = "";
+                foreach (string segment in definition.Group.Split('/'))
+                {
+                    path = path.Length == 0 ? segment : path + "/" + segment;
+                    if (!groups.TryGetValue(path, out SettingsGroup group))
+                    {
+                        group = new SettingsGroup(segment, path);
+                        groups.Add(path, group);
+                        if (parent == null) roots.Add(group);
+                        else parent.children.Add(group);
+                    }
+                    parent = group;
+                }
+                parent.settings.Add(definition);
             }
-            foreach (var child in group.children) Visit(child, path, seen, result);
-            path.Remove(group);
+            return roots.OrderBy(group => group.DisplayName, StringComparer.Ordinal).ToList().AsReadOnly();
         }
     }
 }
