@@ -41,6 +41,130 @@ namespace UnscriptedEngine
         {
         }
 
+        /// <summary>
+        /// Starts a local editor session: the first caller hosts, subsequent instances join.
+        /// Returns true when startup is queued or networking is already running, not when connected.
+        /// Returns false in player builds. Call from Start after base.Start().
+        /// </summary>
+        protected bool TryStartEditorSession()
+        {
+#if UNITY_EDITOR
+            var manager = NetworkManager != null ? NetworkManager : NetworkManager.Singleton;
+            if (!Application.isPlaying || !isActiveAndEnabled || manager == null || manager.ShutdownInProgress)
+                return false;
+            if (editorSessionCoroutine != null || manager.IsListening)
+                return true;
+            if (!(manager.NetworkConfig.NetworkTransport is Unity.Netcode.Transports.UTP.UnityTransport transport)
+                || transport.Protocol != Unity.Netcode.Transports.UTP.UnityTransport.ProtocolType.UnityTransport)
+            {
+                Debug.LogError("Editor sessions require direct Unity Transport (no Relay).", this);
+                return false;
+            }
+
+            UnityEditor.EditorApplication.playModeStateChanged += OnEditorSessionPlayModeChanged;
+            editorSessionCoroutine = StartCoroutine(StartEditorSession(manager, transport));
+            return true;
+#else
+            return false;
+#endif
+        }
+
+#if UNITY_EDITOR
+        private Coroutine editorSessionCoroutine;
+        private System.IO.FileStream editorHostLock;
+
+        private IEnumerator StartEditorSession(NetworkManager manager,
+            Unity.Netcode.Transports.UTP.UnityTransport transport)
+        {
+            // Let all scene Start methods finish, and assign the coroutine handle before completion.
+            yield return null;
+            try
+            {
+                if (manager == null || manager.IsListening || manager.ShutdownInProgress)
+                    yield break;
+
+                ushort port = transport.ConnectionData.Port;
+                // Product identity stays the same in Multiplayer Play Mode and cloned projects.
+                string key = Hash128.Compute(Application.companyName + "/" + Application.productName + "/" + port).ToString();
+                string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "UnscriptedEngine-" + key + ".lock");
+                bool host;
+                try
+                {
+                    editorHostLock = new System.IO.FileStream(path, System.IO.FileMode.OpenOrCreate,
+                        System.IO.FileAccess.ReadWrite, System.IO.FileShare.None);
+                    host = true;
+                }
+                catch (System.IO.IOException exception)
+                {
+                    // Only sharing/lock violations mean another instance owns this session.
+                    int error = exception.HResult & 0xffff;
+                    if (error != 32 && error != 33 && error != 11)
+                        throw;
+                    host = false;
+                }
+
+                transport.SetConnectionData("127.0.0.1", port, "127.0.0.1");
+                if (host)
+                {
+                    if (!manager.StartHost())
+                    {
+                        Debug.LogError("Editor host failed to start. Check transport configuration and port availability.", this);
+                        yield break;
+                    }
+                    Debug.Log($"Editor session hosting on 127.0.0.1:{port}.", this);
+                    while (manager != null && (manager.IsListening || manager.ShutdownInProgress))
+                        yield return null;
+                }
+                else
+                {
+                    float deadline = Time.realtimeSinceStartup + 15f;
+                    while (manager != null && Time.realtimeSinceStartup < deadline)
+                    {
+                        if (!manager.ShutdownInProgress && !manager.IsListening)
+                            manager.StartClient();
+                        if (manager.IsConnectedClient)
+                        {
+                            Debug.Log($"Editor session joined 127.0.0.1:{port}.", this);
+                            yield break;
+                        }
+                        yield return new WaitForSecondsRealtime(0.25f);
+                    }
+                    if (manager != null)
+                        manager.Shutdown();
+                    Debug.LogWarning("Editor client could not connect within 15 seconds. Call TryStartEditorSession again to retry.", this);
+                }
+            }
+            finally
+            {
+                UnityEditor.EditorApplication.playModeStateChanged -= OnEditorSessionPlayModeChanged;
+                ReleaseEditorHostLock();
+                editorSessionCoroutine = null;
+            }
+        }
+
+        private void OnEditorSessionPlayModeChanged(UnityEditor.PlayModeStateChange state)
+        {
+            if (state == UnityEditor.PlayModeStateChange.ExitingPlayMode)
+                StopEditorSessionStartup();
+        }
+
+        private void StopEditorSessionStartup()
+        {
+            UnityEditor.EditorApplication.playModeStateChanged -= OnEditorSessionPlayModeChanged;
+            if (editorSessionCoroutine != null)
+                StopCoroutine(editorSessionCoroutine);
+            editorSessionCoroutine = null;
+            ReleaseEditorHostLock();
+        }
+
+        private void ReleaseEditorHostLock()
+        {
+            editorHostLock?.Dispose();
+            editorHostLock = null;
+            // Keep the empty file: deleting it introduces a race with another instance opening it.
+        }
+#endif
+
         public override void OnNetworkSpawn()
         {
             base.OnNetworkSpawn();
@@ -72,6 +196,9 @@ namespace UnscriptedEngine
 
         public override void OnDestroy()
         {
+#if UNITY_EDITOR
+            StopEditorSessionStartup();
+#endif
             StopInitializationCoroutine();
 
             if (Instance == this)
