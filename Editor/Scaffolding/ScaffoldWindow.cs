@@ -10,14 +10,31 @@ namespace UnscriptedEngine.Editor.Scaffolding
     {
         [SerializeField] private string scaffoldName = "Example";
         [SerializeField] private DefaultAsset folder;
+        [SerializeField] private string initializedDefaultFolder;
         private Vector2 scroll;
         protected abstract bool GeneratesScene { get; }
         protected virtual string Heading => GeneratesScene ? "Scene setup" : "Controller and pawn";
+        protected virtual string DefaultOutputFolder => "Assets";
 
         protected virtual void OnEnable()
         {
             minSize = new Vector2(440, 380);
-            if (folder == null) folder = AssetDatabase.LoadAssetAtPath<DefaultAsset>("Assets");
+            if (folder == null || (initializedDefaultFolder != DefaultOutputFolder
+                && AssetDatabase.GetAssetPath(folder) == "Assets"))
+            {
+                string[] segments = DefaultOutputFolder.Split('/');
+                string path = segments[0];
+                for (int i = 1; i < segments.Length; i++)
+                {
+                    string child = path + "/" + segments[i];
+                    if (!AssetDatabase.IsValidFolder(child)
+                        && string.IsNullOrEmpty(AssetDatabase.CreateFolder(path, segments[i])))
+                        throw new InvalidOperationException("Cannot create default output folder: " + child);
+                    path = child;
+                }
+                folder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(DefaultOutputFolder);
+            }
+            initializedDefaultFolder = DefaultOutputFolder;
         }
 
         protected virtual void OnGUI()

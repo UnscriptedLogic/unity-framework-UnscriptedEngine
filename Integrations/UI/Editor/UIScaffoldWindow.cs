@@ -9,6 +9,7 @@ namespace UnscriptedEngine.UI.Editor
         [SerializeField] private bool widget;
         protected override bool GeneratesScene => false;
         protected override string Heading => "UI setup";
+        protected override string DefaultOutputFolder => "Assets/GameAssets/Prefabs/UI";
 
         [MenuItem("Tools/UnscriptedEngine/Create UI...")]
         public static void Open() { GetWindow<UIScaffoldWindow>("UI Setup"); }

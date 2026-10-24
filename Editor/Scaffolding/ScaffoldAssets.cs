@@ -92,11 +92,23 @@ namespace UnscriptedEngine.Editor.Scaffolding
             Scene preview = EditorSceneManager.NewPreviewScene();
             try
             {
-                controller = CreateObject(plan, "C", true);
-                pawn = CreateObject(plan, "P", true);
+                var template = ScaffoldGeneration.CreateTemplate(plan.templateType);
+                if (template is IPlayerPrefabScaffoldTemplate source)
+                {
+                    PlayerPrefabScaffold.Validate(source);
+                    controller = PlayerPrefabScaffold.Clone(source.ControllerPrefab, source.ControllerBaseType,
+                        ScaffoldGeneration.ResolveScript(plan, "C"), "C_" + plan.name, preview);
+                    pawn = PlayerPrefabScaffold.Clone(source.PawnPrefab, source.PawnBaseType,
+                        ScaffoldGeneration.ResolveScript(plan, "P"), "P_" + plan.name, preview);
+                }
+                else
+                {
+                    controller = CreateObject(plan, "C", true);
+                    pawn = CreateObject(plan, "P", true);
+                }
                 SceneManager.MoveGameObjectToScene(controller, preview);
                 SceneManager.MoveGameObjectToScene(pawn, preview);
-                ScaffoldGeneration.CreateTemplate(plan.templateType).Configure(controller, pawn);
+                template.Configure(controller, pawn);
                 var controllerPrefab = SavePrefab(plan, controller, plan.PathFor("C", "prefab"), files);
                 var pawnPrefab = SavePrefab(plan, pawn, plan.PathFor("P", "prefab"), files);
                 var definition = ScriptableObject.CreateInstance<UPlayerDefinition>();

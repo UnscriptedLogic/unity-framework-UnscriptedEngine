@@ -81,6 +81,22 @@ Unity UI 2.0 or later. Custom output assembly definitions must reference
 
 ## Adding presets
 
+This project's **FirstnThird Person** preset supports toggling between first-person and third-person views and is registered by
+`Assets/Editor/FirstThirdPersonScaffoldTemplate.cs`. It uses the current
+`Assets/Prefabs/Default/DefaultPawn.prefab` and `PlayerController.prefab`, including
+camera hierarchy, movement, equipment, UI references, and assigned input actions.
+Generated `C_Name` and `P_Name` inherit `PlayerController` and `DefaultPlayerPawn`.
+These presets therefore depend on the project's runtime classes and referenced assets;
+they are not standalone copies of those scripts. Future base-class changes apply to
+generated subclasses; prefab configuration is copied at generation time.
+Generate into the project's default runtime assembly (Assembly-CSharp), since custom
+assembly definitions cannot reference these project classes in Assembly-CSharp.
+
+For other prefab-backed presets, implement `IPlayerPrefabScaffoldTemplate` and provide
+the two prefab assets and their inheritable root component types. The builder clones
+each hierarchy, copies serialized fields to the generated subclass, and remaps local
+references to the replaced root component. Original prefab assets are not edited.
+
 Implement `IPlayerScaffoldTemplate` in an Editor assembly referencing
 `UnscriptedEngine.Editor`. Give it a public parameterless constructor. The player
 window discovers implementations through `TypeCache`.

@@ -35,6 +35,8 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 throw new InvalidOperationException("Wait for Edit Mode and compilation to finish.");
             plan.Validate();
             IPlayerScaffoldTemplate template = plan.scene || plan.ui != UIScaffoldKind.None ? null : CreateTemplate(plan.templateType);
+            if (template is IPlayerPrefabScaffoldTemplate prefabTemplate)
+                PlayerPrefabScaffold.Validate(prefabTemplate);
             if (plan.ui != UIScaffoldKind.None) GetUIBuilder();
             if (!plan.ConfirmConflicts(plan.OutputPaths())) return;
             plan.EnsureOutputFolders();
@@ -43,6 +45,9 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 : plan.scene
                 ? new[] { "UGameMode", "UGameInstance", "UGameState", "Unity.Netcode.NetworkManager" }
                 : new[] { "UController", "UPawn" };
+            if (template is IPlayerPrefabScaffoldTemplate sourceTemplate)
+                bases = new[] { "global::" + sourceTemplate.ControllerBaseType.FullName.Replace('+', '.'),
+                    "global::" + sourceTemplate.PawnBaseType.FullName.Replace('+', '.') };
             using (var files = new ScaffoldFileTransaction())
             {
                 for (int i = 0; i < plan.Prefixes.Length; i++)
