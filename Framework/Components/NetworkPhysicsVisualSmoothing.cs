@@ -1,4 +1,5 @@
 using Unity.Netcode;
+using Unity.Netcode.Components;
 using UnityEngine;
 
 namespace UnscriptedEngine
@@ -30,6 +31,12 @@ namespace UnscriptedEngine
 
             localPosition = visualRoot.localPosition;
             localRotation = visualRoot.localRotation;
+
+            // This component owns presentation smoothing. Interpolating the root
+            // as well delays the collider used by predicted player movement.
+            NetworkTransform networkTransform = GetComponent<NetworkTransform>();
+            if (networkTransform != null)
+                networkTransform.Interpolate = false;
         }
 
         private void LateUpdate()

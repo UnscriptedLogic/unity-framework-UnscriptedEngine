@@ -639,7 +639,11 @@ namespace UnscriptedEngine
                 }
             }
 
-            Vector3 previousRenderPosition = transform.position;
+            Vector3 previousRenderPosition = GetOwnerRenderPosition();
+            Vector3 previousSimulationPosition = SimulationPosition;
+            Vector3 previousInterpolationPosition = previousFixedPosition;
+            bool hadFixedPositionSamples = hasFixedPositionSamples;
+
             ApplyState(authoritativeState);
 
             for (int replayTick = authoritativeState.Tick + 1; replayTick < localTick; replayTick++)
@@ -655,11 +659,54 @@ namespace UnscriptedEngine
                 StoreState(CaptureState(replayTick));
             }
 
-            ResetFixedPositionSamples(transform.position);
-            Vector3 correctionOffset = previousRenderPosition - transform.position;
+            RestoreOwnerInterpolationAfterCorrection(previousRenderPosition, previousSimulationPosition,
+                previousInterpolationPosition, hadFixedPositionSamples);
+        }
+
+        private Vector3 GetOwnerRenderPosition()
+        {
+            if (hasInterpolatedTransform)
+                return transform.position;
+
+            if (!interpolateOwnerMovement || !hasFixedPositionSamples || Time.fixedDeltaTime <= 0f)
+                return transform.position;
+
+            return Vector3.Lerp(previousFixedPosition, currentFixedPosition, GetOwnerInterpolationAlpha())
+                + ownerCorrectionOffset;
+        }
+
+        private void RestoreOwnerInterpolationAfterCorrection(Vector3 previousRenderPosition,
+            Vector3 previousSimulationPosition, Vector3 previousInterpolationPosition, bool hadFixedPositionSamples)
+        {
+            Vector3 correctedPosition = transform.position;
+            Vector3 correction = correctedPosition - previousSimulationPosition;
+            bool canSmoothCorrection = interpolateOwnerMovement && ownerCorrectionSmoothingSpeed > 0f &&
+                ownerInterpolationSnapDistance > 0f &&
+                correction.sqrMagnitude < ownerInterpolationSnapDistance * ownerInterpolationSnapDistance;
+
+            ResetFixedPositionSamples(correctedPosition);
+            if (!canSmoothCorrection)
+                return;
+
+            // Preserve the fixed-step trajectory instead of collapsing both samples
+            // on every snapshot. Multiple corrections before a render must also
+            // preserve the already accumulated visual offset.
+            if (hadFixedPositionSamples)
+                previousFixedPosition = previousInterpolationPosition + correction;
+
+            Vector3 correctedRenderPosition = Vector3.Lerp(
+                previousFixedPosition, currentFixedPosition, GetOwnerInterpolationAlpha());
+            Vector3 correctionOffset = previousRenderPosition - correctedRenderPosition;
             ownerCorrectionOffset = interpolateOwnerMovement && ownerCorrectionSmoothingSpeed > 0f &&
                 correctionOffset.sqrMagnitude < ownerInterpolationSnapDistance * ownerInterpolationSnapDistance
                 ? correctionOffset : Vector3.zero;
+        }
+
+        private float GetOwnerInterpolationAlpha()
+        {
+            return Time.fixedDeltaTime > 0f
+                ? Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime)
+                : 1f;
         }
 
         private void ApplyState(CharacterMoveState state)
@@ -815,7 +862,7 @@ namespace UnscriptedEngine
                 return;
             }
 
-            float interpolationAlpha = Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime);
+            float interpolationAlpha = GetOwnerInterpolationAlpha();
             ownerCorrectionOffset *= Mathf.Exp(-ownerCorrectionSmoothingSpeed * Time.deltaTime);
             transform.position = Vector3.Lerp(previousFixedPosition, currentFixedPosition, interpolationAlpha)
                 + ownerCorrectionOffset;
