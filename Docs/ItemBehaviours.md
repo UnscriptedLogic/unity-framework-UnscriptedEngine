@@ -1,5 +1,22 @@
 # Equipped item behaviours
 
+For inventory selection, held visuals, input forwarding, and selected-item dropping, see [ItemEquipComponent](ItemEquipComponent.md). This guide focuses on behaviour authoring and behaviour-session lifetime.
+
+## Hand offset presets
+
+Expand the item's equip fragment and use **Anchor pose > Presets**, or right-click
+Anchor Position/Anchor Rotation and open **Anchor Pose**. Set the desired position and
+rotation once, then choose **Save Current Pose as Left Hand** or **Right Hand**. Other
+items can use **Apply Left Hand** or **Apply Right Hand** to copy both values, with Undo
+support. Values remain editable and are not linked to later preset changes.
+
+Presets start unset because offsets depend on your equip anchor and artwork. They are
+stored per project in `ProjectSettings/UnscriptedEngineItemPoses.asset`; commit that file
+to share presets with your team. Saving again replaces that hand's preset. These are
+local offsets relative to the current equip anchor; they do not select a hand socket.
+
+## Behaviour authoring
+
 Add one concrete `UItemFragBehaviour` subclass to `ItemDataSO.fragments` using the
 existing fragment Inspector. Its `CreateBehaviour(ItemBehaviourContext)` must return
 a fresh plain C# `ItemBehaviour`. The first behaviour fragment is used.
@@ -19,8 +36,8 @@ existing visual-only items need no changes.
 Equip may run before network spawn, matching existing held-visual setup. Use it for
 binding/presentation only. Tick, FixedTick and Use follow UObjectComponent gameplay
 readiness. Shared ticks run on server and clients: game-specific behaviour must choose
-authority using context.Equipment.IsServer/IsOwner. This API does not replicate actions
-or inventory and does not provide server validation.
+authority using context.Equipment.IsServer/IsOwner. Behaviour actions do not replicate or
+receive server validation; spawned UInventoryComponent contents replicate separately.
 
 Pawn/input adapters call `equipment.Use("primary", pressed)` (or another game-defined
 action name). A true result means the behaviour handled the input. Call CancelUse on
