@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnscriptedEngine;
+using UnscriptedEngine.Item;
 
 public class ItemEquipComponent : UObjectComponent
 {
@@ -18,12 +19,37 @@ public class ItemEquipComponent : UObjectComponent
     private bool observingInventory;
     private GameObject heldVisual;
     private ItemDataSO heldItem;
+    private ItemBehaviour heldBehaviour;
+    private int heldSlotIndex = -1;
+    private bool refreshing;
+    private bool clearing;
 
     public IInventory Inventory => inventory;
     public int SelectedSlotIndex { get; private set; } = -1;
     public int VisibleSlotCount => IsInventoryAvailable()
         ? Mathf.Min(Mathf.Max(0, hotbarSize), Mathf.Max(0, inventory.InventorySize)) : 0;
     public ItemDataSO HeldItem => heldItem;
+    public GameObject HeldVisual => heldVisual;
+
+    /// <summary>Input mapping and network authority belong to the caller/game behaviour.</summary>
+    public bool Use(string action, bool pressed)
+    {
+        if (!isActiveAndEnabled || !CanTick || refreshing || clearing || string.IsNullOrEmpty(action)) return false;
+        return heldBehaviour?.Use(action, pressed) ?? false;
+    }
+
+    /// <summary>Call on input focus loss or unpossession, even when gameplay input is blocked.</summary>
+    public void CancelUse() => heldBehaviour?.CancelUse();
+
+    protected override void Tick(float deltaTime) => heldBehaviour?.Tick(deltaTime);
+    protected override void FixedTick(float deltaTime) => heldBehaviour?.FixedTick(deltaTime);
+
+    protected override void OnDespawned()
+    {
+        StopObservingInventory();
+        ClearHeldVisual();
+        base.OnDespawned();
+    }
 
     protected override void OnEnable()
     {
@@ -77,6 +103,7 @@ public class ItemEquipComponent : UObjectComponent
 
     public void SetInventory(IInventory newInventory)
     {
+        if (refreshing || clearing) throw new System.InvalidOperationException("Cannot replace inventory during equipment callbacks.");
         StopObservingInventory();
         inventory = newInventory;
         inventoryComponent = newInventory as Component;
@@ -116,7 +143,7 @@ public class ItemEquipComponent : UObjectComponent
 
     public bool SelectSlot(int slotIndex)
     {
-        if (!isActiveAndEnabled || slotIndex < 0 || slotIndex >= VisibleSlotCount)
+        if (refreshing || clearing || !isActiveAndEnabled || slotIndex < 0 || slotIndex >= VisibleSlotCount)
         {
             Log($"Selection rejected: slot {slotIndex}, available slots {VisibleSlotCount}, active {isActiveAndEnabled}.");
             return false;
@@ -129,26 +156,50 @@ public class ItemEquipComponent : UObjectComponent
 
     private void RefreshHeldItem()
     {
+        if (refreshing || clearing || !isActiveAndEnabled) return;
+        refreshing = true;
+        try { RefreshHeldItemInternal(); }
+        finally { refreshing = false; }
+    }
+
+    private void RefreshHeldItemInternal()
+    {
         int slotCount = VisibleSlotCount;
         Log($"Refreshing held item; selected slot {SelectedSlotIndex}, available slots {slotCount}.");
         SelectedSlotIndex = slotCount == 0 ? -1 : Mathf.Clamp(SelectedSlotIndex, 0, slotCount - 1);
         ItemDataSO item = GetSelectedItem();
-        if (item != null && item == heldItem && heldVisual != null) return;
+        if (item != null && item == heldItem && heldSlotIndex == SelectedSlotIndex
+            && (heldVisual != null || FindEquipFragment(item)?.VisualPrefab == null)) return;
         ClearHeldVisual();
+        if (!isActiveAndEnabled || item == null) return;
         UItemFragEquip fragment = FindEquipFragment(item);
-        if (fragment == null || fragment.VisualPrefab == null)
+        if (fragment != null && fragment.VisualPrefab != null)
         {
-            Log(item == null
-                ? $"Slot {SelectedSlotIndex} has no item to display."
-                : $"Item {item.name} has no equip fragment or visual prefab; no held visual created.");
-            return;
+            Transform anchor = equipAnchor != null ? equipAnchor : transform;
+            heldVisual = Instantiate(fragment.VisualPrefab, anchor, false);
+            heldVisual.transform.localPosition = fragment.AnchorPosition;
+            heldVisual.transform.localRotation = Quaternion.Euler(fragment.AnchorRotation);
         }
-        Transform anchor = equipAnchor != null ? equipAnchor : transform;
-        heldVisual = Instantiate(fragment.VisualPrefab, anchor, false);
-        heldVisual.transform.localPosition = fragment.AnchorPosition;
-        heldVisual.transform.localRotation = Quaternion.Euler(fragment.AnchorRotation);
         heldItem = item;
-        Log($"Created held visual {heldVisual.name} for {item.name} at anchor {anchor.name}.");
+        heldSlotIndex = SelectedSlotIndex;
+        try
+        {
+            if (item.fragments != null)
+                foreach (UItemFragment candidate in item.fragments)
+                    if (candidate is UItemFragBehaviour factory)
+                    {
+                        heldBehaviour = factory.CreateBehaviour(new ItemBehaviourContext(
+                            this, inventory, item, heldSlotIndex, heldVisual));
+                        heldBehaviour?.Equip();
+                        break;
+                    }
+        }
+        catch
+        {
+            ClearHeldVisual();
+            throw;
+        }
+        Log($"Equipped {item.name} from slot {heldSlotIndex}.");
     }
 
     private ItemDataSO GetSelectedItem()
@@ -170,14 +221,37 @@ public class ItemEquipComponent : UObjectComponent
 
     private void ClearHeldVisual()
     {
-        if (heldVisual != null)
-        {
-            Log($"Clearing held visual {heldVisual.name}.");
-            heldVisual.SetActive(false);
-            Destroy(heldVisual);
-        }
+        if (clearing) return;
+        clearing = true;
+        try { ClearHeldVisualInternal(); }
+        finally { clearing = false; }
+    }
+
+    private void ClearHeldVisualInternal()
+    {
+        // Detach first: callbacks can disable/destroy this component recursively.
+        ItemBehaviour behaviour = heldBehaviour;
+        GameObject visual = heldVisual;
+        heldBehaviour = null;
         heldVisual = null;
         heldItem = null;
+        heldSlotIndex = -1;
+        if (behaviour != null)
+        {
+            Cleanup(behaviour.CancelUse);
+            Cleanup(behaviour.Unequip);
+            Cleanup(behaviour.Dispose);
+        }
+        if (visual == null) return;
+        visual.SetActive(false);
+        if (Application.isPlaying) Destroy(visual);
+        else DestroyImmediate(visual);
+    }
+
+    private void Cleanup(System.Action callback)
+    {
+        try { callback(); }
+        catch (System.Exception exception) { UnityEngine.Debug.LogException(exception, this); }
     }
 
     private void Log(string message)
