@@ -127,6 +127,8 @@ namespace UnscriptedEngine
         [Header("Smoothing")]
         [SerializeField] private bool interpolateOwnerMovement = true;
         [SerializeField] private float ownerInterpolationSnapDistance = 2f;
+        [SerializeField, Min(0f)] private float ownerCorrectionSmoothingSpeed = 18f;
+        private Vector3 ownerCorrectionOffset;
 
         [Header("Controller Stability")]
         [SerializeField] private float minimumControllerSkinWidth = 0.01f;
@@ -629,6 +631,7 @@ namespace UnscriptedEngine
                 }
             }
 
+            Vector3 previousRenderPosition = transform.position;
             ApplyState(authoritativeState);
 
             for (int replayTick = authoritativeState.Tick + 1; replayTick < localTick; replayTick++)
@@ -645,6 +648,10 @@ namespace UnscriptedEngine
             }
 
             ResetFixedPositionSamples(transform.position);
+            Vector3 correctionOffset = previousRenderPosition - transform.position;
+            ownerCorrectionOffset = interpolateOwnerMovement && ownerCorrectionSmoothingSpeed > 0f &&
+                correctionOffset.sqrMagnitude < ownerInterpolationSnapDistance * ownerInterpolationSnapDistance
+                ? correctionOffset : Vector3.zero;
         }
 
         private void ApplyState(CharacterMoveState state)
@@ -788,14 +795,10 @@ namespace UnscriptedEngine
                 return;
             }
 
-            if ((currentFixedPosition - previousFixedPosition).sqrMagnitude <= Mathf.Epsilon)
-            {
-                RestoreSimulationPosition();
-                return;
-            }
-
             float interpolationAlpha = Mathf.Clamp01((Time.time - Time.fixedTime) / Time.fixedDeltaTime);
-            transform.position = Vector3.Lerp(previousFixedPosition, currentFixedPosition, interpolationAlpha);
+            ownerCorrectionOffset *= Mathf.Exp(-ownerCorrectionSmoothingSpeed * Time.deltaTime);
+            transform.position = Vector3.Lerp(previousFixedPosition, currentFixedPosition, interpolationAlpha)
+                + ownerCorrectionOffset;
             hasInterpolatedTransform = true;
         }
 
@@ -825,6 +828,7 @@ namespace UnscriptedEngine
 
         private void ResetFixedPositionSamples(Vector3 position)
         {
+            ownerCorrectionOffset = Vector3.zero;
             previousFixedPosition = position;
             currentFixedPosition = position;
             hasFixedPositionSamples = true;
