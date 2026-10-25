@@ -50,12 +50,20 @@ The generated Use method deliberately handles no action until you implement one.
 your pawn's actions to ItemEquipComponent.Use and cancellation to CancelUse as described
 in [ItemBehaviours](ItemBehaviours.md).
 
+To let players drop the generated item from its selected slot, add `UItemFragDrop` to its
+`ItemDataSO` and assign the generated world prefab. `ItemEquipComponent.Drop` uses that
+prefab and its configured drop origin/speed. See [Inventory System](InventorySystem.md)
+and [ItemEquipComponent](ItemEquipComponent.md).
+
 Pickup adds the full quantity to the interacting source's child UInventoryComponent.
 The inventory must be initialized. If it is missing or full, the world item remains
 available. Successful pickup despawns a networked item on the server, or destroys an
-offline item. Inventory replication is not supplied by the creator. Register the world
-prefab in your game's NetworkPrefabsList when spawning it dynamically over the network.
-The tool does not change scenes or NetworkManager configuration.
+offline item. Spawned `UInventoryComponent` contents replicate automatically; save-game
+persistence and game-specific server rules remain project setup. The editor generates
+`Assets/Resources/UnscriptedItemCatalog.asset` from item assets and rebuilds it before
+Play Mode and builds. Register the world prefab in your game's NetworkPrefabsList when
+spawning it dynamically over the network. The tool does not change scenes or
+NetworkManager configuration.
 
 If compilation fails, fix Console errors and use **Finish Pending Item**. A custom
 assembly definition containing generated scripts must reference UnscriptedEngine and

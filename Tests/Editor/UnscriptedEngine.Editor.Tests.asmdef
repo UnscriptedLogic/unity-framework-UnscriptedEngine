@@ -6,6 +6,7 @@
         "UnscriptedEngine.Editor",
         "UnscriptedEngine.Tests.Support",
         "Unity.Netcode.Runtime",
+        "Unity.Collections",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Unity.Networking.Transport"

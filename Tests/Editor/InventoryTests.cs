@@ -25,6 +25,87 @@ namespace UnscriptedEngine.Tests
             inventory.Changed += Changed;
         }
         private void Changed() => changes++;
+
+        [Test]
+        public void SnapshotRoundTripPreservesSparseSlotsAndQuantities()
+        {
+            var snapshot = new UInventoryComponent.InventorySnapshot
+            {
+                Capacity = 10,
+                Entries = new[]
+                {
+                    new UInventoryComponent.InventoryEntry { Slot = 2, Quantity = 3, ItemId = "first-item" },
+                    new UInventoryComponent.InventoryEntry { Slot = 8, Quantity = 1, ItemId = "second-item" }
+                }
+            };
+            using var writer = new Unity.Netcode.FastBufferWriter(1024, Unity.Collections.Allocator.Temp);
+            writer.WriteNetworkSerializable(snapshot);
+            using var reader = new Unity.Netcode.FastBufferReader(writer, Unity.Collections.Allocator.Temp);
+            reader.ReadNetworkSerializable(out UInventoryComponent.InventorySnapshot received);
+            Assert.That(received.Equals(snapshot), Is.True);
+            Assert.That(received.Entries, Is.Not.SameAs(snapshot.Entries));
+        }
+
+        [Test]
+        public void DropPermissionDefaultsToAllowedAndCanBeDisabled()
+        {
+            Assert.That(inventory.DropsAllowed, Is.True);
+            inventory.TryAddItem(item, 2);
+            inventory.SetDropsAllowed(false);
+            var result = inventory.TryDropItem(0, Vector3.zero, Quaternion.identity, out var pickup);
+            Assert.That(result.Success, Is.False);
+            Assert.That(result.Message, Is.EqualTo("Item dropping is disabled"));
+            Assert.That(pickup, Is.Null);
+            Assert.That(inventory.Items[0].Quantity, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void MissingDropPrefabPreservesInventory()
+        {
+            inventory.TryAddItem(item, 2);
+            changes = 0;
+            var result = inventory.TryDropItem(0, Vector3.zero, Quaternion.identity, out var pickup);
+            Assert.That(result.Success, Is.False);
+            Assert.That(pickup, Is.Null);
+            Assert.That(inventory.Items[0].Quantity, Is.EqualTo(2));
+            Assert.That(changes, Is.Zero);
+        }
+
+        [Test]
+        public void DropTransfersQuantityAndClearsEquipmentWhenEmpty()
+        {
+            var prefabObject = new GameObject("Pickup prefab");
+            var prefab = prefabObject.AddComponent<UnscriptedEngine.Item.UWorldItem>();
+            var fragment = new UItemFragDrop();
+            typeof(UItemFragDrop).GetField("worldPrefab", BindingFlags.Instance | BindingFlags.NonPublic)
+                .SetValue(fragment, prefab);
+            item.fragments.Add(fragment);
+            inventory.TryAddItem(item, 2);
+            var equipment = host.AddComponent<ItemEquipComponent>();
+            equipment.SetInventory(inventory);
+            UnscriptedEngine.Item.UWorldItem first = null;
+            UnscriptedEngine.Item.UWorldItem second = null;
+            try
+            {
+                changes = 0;
+                Assert.That(inventory.TryDropItem(0, Vector3.one, Quaternion.identity, out first).Success, Is.True);
+                Assert.That(first.ItemData, Is.SameAs(item));
+                Assert.That(first.Quantity, Is.EqualTo(1));
+                Assert.That(first.transform.position, Is.EqualTo(Vector3.one));
+                Assert.That(inventory.Items[0].Quantity, Is.EqualTo(1));
+                Assert.That(equipment.HeldItem, Is.SameAs(item));
+                Assert.That(changes, Is.EqualTo(1));
+                Assert.That(inventory.TryDropItem(0, Vector3.zero, Quaternion.identity, out second).Success, Is.True);
+                Assert.That(inventory.Items.ContainsKey(0), Is.False);
+                Assert.That(equipment.HeldItem, Is.Null);
+            }
+            finally
+            {
+                if (first != null) Object.DestroyImmediate(first.gameObject);
+                if (second != null) Object.DestroyImmediate(second.gameObject);
+                Object.DestroyImmediate(prefabObject);
+            }
+        }
         [TearDown] public void Cleanup()
         {
             inventory.Changed -= Changed;

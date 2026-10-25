@@ -1,7 +1,7 @@
-# Inventory foundation
+# Inventory system
 
-`ItemStack` is the canonical transferable runtime value. `ItemDefinition` contains static authoring data; `InventoryContainer` owns slots; `InventoryComponent` exposes the container and slot-change events; `ItemWorldEntity` represents a dropped stack; and `PlacedItem` represents a placed item.
+`UInventoryComponent` implements `IInventory` and stores `ItemDataSO` plus quantity in zero-based sparse slots. Operations validate capacity and report success through `UInventoryComponent.OperationResult`.
 
-Recommended flow: remove a stack, spawn its dropped prefab, and call `Initialize`. For placement, consume one stack, spawn the placed prefab, and call `PlacedItem.Initialize`. Breaking a placed object calls `CreatePickupStack` and adds the result to an inventory.
+For setup, APIs, events, and world pickup/drop behavior, see [Inventory System](../../Docs/InventorySystem.md). For hotbar selection, held visuals, item behaviours, and selected-item dropping, see [ItemEquipComponent](../../Docs/ItemEquipComponent.md).
 
-For Netcode, replicate a stable `ItemDefinition.ItemId` plus stack state rather than a Unity object reference. Resolve IDs through a project-level item database on each peer; the database and addressable strategy are intentionally project-specific.
+Spawned `UInventoryComponent` instances replicate slot snapshots and drop permission from server to clients. Save-game persistence and client requests for add/remove/split remain project responsibilities. Networked `UWorldItem` pickups replicate item ID and quantity; register pickup prefabs with the `NetworkManager` and keep generated item catalogs aligned across peers.

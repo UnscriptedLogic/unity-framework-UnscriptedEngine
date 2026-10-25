@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnscriptedEngine;
 using UnscriptedEngine.Item;
+using Unity.Netcode;
+using Unity.Collections;
 
 public class ItemEquipComponent : UObjectComponent
 {
@@ -10,6 +12,11 @@ public class ItemEquipComponent : UObjectComponent
     private int hotbarSize = 10;
     [SerializeField, Tooltip("Parent transform for held visuals. Uses this transform when unassigned.")]
     private Transform equipAnchor;
+
+    [Header("Dropping")]
+    [SerializeField] private Transform dropOrigin;
+    [SerializeField] private Vector3 dropOffset = new Vector3(0f, 0.5f, 0.75f);
+    [SerializeField, Min(0f)] private float dropSpeed = 2f;
 
     [Header("Debug")]
     [SerializeField, Tooltip("Log inventory observation, slot selection, and held visual changes.")]
@@ -23,6 +30,20 @@ public class ItemEquipComponent : UObjectComponent
     private int heldSlotIndex = -1;
     private bool refreshing;
     private bool clearing;
+    private readonly NetworkVariable<int> selectedSlot = new(-1);
+
+    protected override void OnSpawned()
+    {
+        base.OnSpawned();
+        selectedSlot.OnValueChanged += ApplySelectedSlot;
+        if (!IsServer) ApplySelectedSlot(-1, selectedSlot.Value);
+    }
+
+    private void ApplySelectedSlot(int previous, int current)
+    {
+        SelectedSlotIndex = current;
+        RefreshHeldItem();
+    }
 
     public IInventory Inventory => inventory;
     public int SelectedSlotIndex { get; private set; } = -1;
@@ -30,6 +51,54 @@ public class ItemEquipComponent : UObjectComponent
         ? Mathf.Min(Mathf.Max(0, hotbarSize), Mathf.Max(0, inventory.InventorySize)) : 0;
     public ItemDataSO HeldItem => heldItem;
     public GameObject HeldVisual => heldVisual;
+
+    /// <summary>Drop selected items, or queue an owning client's validated server request. Client success means queued.</summary>
+    public bool Drop(Vector3 direction, int quantity = 1)
+    {
+        if (!isActiveAndEnabled || refreshing || clearing || inventory is not UInventoryComponent source
+            || GetSelectedItem() == null || direction.sqrMagnitude < 0.0001f) return false;
+        if (!IsFinite(direction) || !source.DropsAllowed) return false;
+        if (IsSpawned && !IsServer)
+        {
+            if (!IsOwner) return false;
+            RequestDropRpc(SelectedSlotIndex, GetSelectedItem().NetworkId, direction, quantity);
+            return true;
+        }
+        return DropAuthoritative(SelectedSlotIndex, direction, quantity);
+    }
+
+    private static bool IsFinite(Vector3 value) =>
+        !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
+        !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&
+        !float.IsNaN(value.z) && !float.IsInfinity(value.z);
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestDropRpc(int slot, FixedString64Bytes expectedItem, Vector3 direction, int quantity, RpcParams rpc = default)
+    {
+        if (rpc.Receive.SenderClientId != OwnerClientId || !isActiveAndEnabled || !IsFinite(direction)
+            || direction.sqrMagnitude < 0.0001f || slot < 0 || slot >= VisibleSlotCount
+            || inventory is not UInventoryComponent source || source.Items == null
+            || !source.IsSpawned || source.OwnerClientId != rpc.Receive.SenderClientId
+            || !source.Items.TryGetValue(slot, out var item) || item.Item.NetworkId != expectedItem.ToString()) return;
+        DropAuthoritative(slot, direction, quantity);
+    }
+
+    private bool DropAuthoritative(int slot, Vector3 direction, int quantity)
+    {
+        if (inventory is not UInventoryComponent source) return false;
+        direction.Normalize();
+        Vector3 position = dropOrigin != null ? dropOrigin.position : transform.TransformPoint(dropOffset);
+        var result = source.TryDropItem(slot, position, Quaternion.LookRotation(direction),
+            out UWorldItem pickup, quantity);
+        if (!result.Success) { Log(result.Message); return false; }
+        if (pickup != null && pickup.TryGetComponent<Rigidbody>(out var body))
+        {
+            body.isKinematic = false;
+            body.useGravity = true;
+            body.linearVelocity = direction * dropSpeed;
+        }
+        return true;
+    }
 
     /// <summary>Input mapping and network authority belong to the caller/game behaviour.</summary>
     public bool Use(string action, bool pressed)
@@ -46,6 +115,7 @@ public class ItemEquipComponent : UObjectComponent
 
     protected override void OnDespawned()
     {
+        selectedSlot.OnValueChanged -= ApplySelectedSlot;
         StopObservingInventory();
         ClearHeldVisual();
         base.OnDespawned();
@@ -143,6 +213,7 @@ public class ItemEquipComponent : UObjectComponent
 
     public bool SelectSlot(int slotIndex)
     {
+        if (IsSpawned && !IsServer && !IsOwner) return false;
         if (refreshing || clearing || !isActiveAndEnabled || slotIndex < 0 || slotIndex >= VisibleSlotCount)
         {
             if (debug) Log($"Selection rejected: slot {slotIndex}, available slots {VisibleSlotCount}, active {isActiveAndEnabled}.");
@@ -150,8 +221,19 @@ public class ItemEquipComponent : UObjectComponent
         }
         if (debug) Log($"Selecting slot {slotIndex}; previous slot {SelectedSlotIndex}.");
         SelectedSlotIndex = slotIndex;
+        if (IsSpawned)
+        {
+            if (IsServer) selectedSlot.Value = slotIndex;
+            else SelectSlotRpc(slotIndex);
+        }
         RefreshHeldItem();
         return true;
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void SelectSlotRpc(int slot, RpcParams rpc = default)
+    {
+        if (rpc.Receive.SenderClientId == OwnerClientId) SelectSlot(slot);
     }
 
     private void RefreshHeldItem()
@@ -167,6 +249,7 @@ public class ItemEquipComponent : UObjectComponent
         int slotCount = VisibleSlotCount;
         if (debug) Log($"Refreshing held item; selected slot {SelectedSlotIndex}, available slots {slotCount}.");
         SelectedSlotIndex = slotCount == 0 ? -1 : Mathf.Clamp(SelectedSlotIndex, 0, slotCount - 1);
+        if (IsSpawned && IsServer) selectedSlot.Value = SelectedSlotIndex;
         ItemDataSO item = GetSelectedItem();
         if (item != null && item == heldItem && heldSlotIndex == SelectedSlotIndex
             && (heldVisual != null || FindEquipFragment(item)?.VisualPrefab == null)) return;

@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using UnityEngine;
+using Unity.Netcode;
+using UnscriptedEngine.Item;
+using Unity.Collections;
 
 namespace UnscriptedEngine
 {
@@ -12,6 +15,99 @@ namespace UnscriptedEngine
         private Dictionary<int, InventorySlot> slots;
         private bool loggingEnabled = true;
         private bool publishingChanges;
+        [SerializeField, Tooltip("Server gameplay rule. Clients may request drops by default.")]
+        private bool itemDroppingAllowed = true;
+        private readonly NetworkVariable<InventorySnapshot> replicatedInventory = new();
+        private readonly NetworkVariable<bool> dropsAllowed = new(true);
+
+        public bool DropsAllowed => IsSpawned ? dropsAllowed.Value : itemDroppingAllowed;
+        public void SetDropsAllowed(bool allowed)
+        {
+            if (IsSpawned && !IsServer) throw new InvalidOperationException("Only the server can change drop permissions.");
+            itemDroppingAllowed = allowed;
+            if (IsSpawned) dropsAllowed.Value = allowed;
+        }
+        private bool CanMutate => IsSpawned ? IsServer :
+            !(Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsListening);
+
+        protected override void OnSpawned()
+        {
+            base.OnSpawned();
+            Initialize();
+            replicatedInventory.OnValueChanged += ApplyReplicatedInventory;
+            if (IsServer) { dropsAllowed.Value = itemDroppingAllowed; ReplicateInventory(); }
+            else ApplyReplicatedInventory(default, replicatedInventory.Value);
+        }
+
+        protected override void OnDespawned()
+        {
+            replicatedInventory.OnValueChanged -= ApplyReplicatedInventory;
+            base.OnDespawned();
+        }
+
+        private void ReplicateInventory()
+        {
+            if (!IsSpawned || !IsServer || slots == null) return;
+            var entries = new InventoryEntry[slots.Count];
+            int index = 0;
+            foreach (var pair in slots)
+                entries[index++] = new InventoryEntry
+                {
+                    Slot = pair.Key, Quantity = pair.Value.Quantity, ItemId = pair.Value.Item.NetworkId
+                };
+            replicatedInventory.Value = new InventorySnapshot { Capacity = inventorySize, Entries = entries };
+        }
+
+        private void ApplyReplicatedInventory(InventorySnapshot previous, InventorySnapshot current)
+        {
+            if (IsServer) return;
+            Initialize();
+            var replacement = new Dictionary<int, InventorySlot>();
+            foreach (var entry in current.Entries ?? Array.Empty<InventoryEntry>())
+            {
+                var item = ItemNetworkCatalog.Resolve(entry.ItemId.ToString());
+                if (item == null) { Debug.LogError($"Unknown network item '{entry.ItemId}'. Rebuild the item catalog.", this); return; }
+                replacement.Add(entry.Slot, new InventorySlot(item, entry.Quantity));
+            }
+            slots.Clear();
+            foreach (var pair in replacement) slots.Add(pair.Key, pair.Value);
+            inventorySize = current.Capacity;
+            PublishChanged();
+        }
+
+        public struct InventoryEntry : INetworkSerializable, IEquatable<InventoryEntry>
+        {
+            public int Slot, Quantity;
+            public FixedString64Bytes ItemId;
+            public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+            {
+                serializer.SerializeValue(ref Slot);
+                serializer.SerializeValue(ref Quantity);
+                serializer.SerializeValue(ref ItemId);
+            }
+            public bool Equals(InventoryEntry other) => Slot == other.Slot && Quantity == other.Quantity && ItemId.Equals(other.ItemId);
+        }
+
+        public struct InventorySnapshot : INetworkSerializable, IEquatable<InventorySnapshot>
+        {
+            public int Capacity;
+            public InventoryEntry[] Entries;
+            public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+            {
+                serializer.SerializeValue(ref Capacity);
+                int count = Entries?.Length ?? 0;
+                serializer.SerializeValue(ref count);
+                if (count < 0 || count > 65536) throw new InvalidOperationException("Invalid inventory snapshot size.");
+                if (serializer.IsReader) Entries = new InventoryEntry[count];
+                for (int i = 0; i < count; i++) serializer.SerializeValue(ref Entries[i]);
+            }
+            public bool Equals(InventorySnapshot other)
+            {
+                if (Capacity != other.Capacity || (Entries?.Length ?? 0) != (other.Entries?.Length ?? 0)) return false;
+                for (int i = 0; i < (Entries?.Length ?? 0); i++) if (!Entries[i].Equals(other.Entries[i])) return false;
+                return true;
+            }
+        }
 
         public int InventorySize => inventorySize;
         public event Action Changed;
@@ -34,6 +130,9 @@ namespace UnscriptedEngine
         // Adds the entire quantity or leaves the inventory unchanged.
         public OperationResult TryAddItem(ItemDataSO itemDataSo, int quantity = 1)
         {
+            if (!CanMutate) return Failure("Inventory changes must be requested through server gameplay actions");
+            if (IsSpawned && itemDataSo != null && ItemNetworkCatalog.Resolve(itemDataSo.NetworkId) != itemDataSo)
+                return Failure("Item is missing from the network catalog");
             if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = PlanAddItem(itemDataSo, quantity, out var additions);
             if (result.Success)
@@ -116,6 +215,7 @@ namespace UnscriptedEngine
         // Removing the final item frees the slot. The default removes one item.
         public OperationResult TryRemoveItem(int slotIndex, int quantity = 1)
         {
+            if (!CanMutate) return Failure("Inventory changes must be requested through server gameplay actions");
             if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = ValidateOccupiedSlot(slotIndex, quantity);
             if (!result.Success) return result;
@@ -130,10 +230,63 @@ namespace UnscriptedEngine
             return Success(slotIndex, quantity, "Items removed successfully");
         }
 
+        /// <summary>Spawn a pickup and consume the quantity only after spawning succeeds. Server/offline only.</summary>
+        public OperationResult TryDropItem(int slotIndex, Vector3 position, Quaternion rotation,
+            out UWorldItem droppedItem, int quantity = 1)
+        {
+            droppedItem = null;
+            if (!CanMutate) return Failure("Drop must run on the server through an equipment request", slotIndex);
+            if (!DropsAllowed) return Failure("Item dropping is disabled", slotIndex);
+            if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
+            var result = ValidateOccupiedSlot(slotIndex, quantity);
+            if (!result.Success) return result;
+            NetworkManager manager = IsSpawned ? NetworkManager : NetworkManager.Singleton;
+            if (manager != null && manager.IsListening && !manager.IsServer)
+                return Failure("Items can only be dropped by the server", slotIndex);
+            ItemDataSO item = slots[slotIndex].Item;
+            UWorldItem prefab = null;
+            if (item.fragments != null)
+                foreach (var fragment in item.fragments)
+                    if (fragment is UItemFragDrop drop) { prefab = drop.WorldPrefab; break; }
+            if (prefab == null) return Failure("Item has no world pickup prefab", slotIndex);
+            UWorldItem instance = null;
+            // Prefab lifecycle callbacks must not mutate the source inventory mid-transfer.
+            publishingChanges = true;
+            try
+            {
+                instance = Instantiate(prefab, position, rotation);
+                instance.Initialize(item, quantity);
+                if (manager != null && manager.IsListening)
+                {
+                    instance.NetworkObject.Spawn();
+                    if (!instance.IsSpawned) throw new InvalidOperationException("Pickup failed to network spawn");
+                }
+            }
+            catch (Exception exception)
+            {
+                if (instance != null)
+                {
+                    if (instance.IsSpawned) instance.NetworkObject.Despawn(true);
+                    else
+                    {
+                        instance.gameObject.SetActive(false);
+                        if (Application.isPlaying) Destroy(instance.gameObject);
+                        else DestroyImmediate(instance.gameObject);
+                    }
+                }
+                return Failure($"Could not spawn dropped item: {exception.Message}", slotIndex);
+            }
+            finally { publishingChanges = false; }
+            result = TryRemoveItem(slotIndex, quantity);
+            droppedItem = instance;
+            return result;
+        }
+
         // Moves part of a stack into a new slot without changing the total quantity.
         // SlotIndex in the result identifies the newly created stack.
         public OperationResult TrySplitStack(int sourceSlotIndex, int quantity)
         {
+            if (!CanMutate) return Failure("Inventory changes must be requested through server gameplay actions");
             if (publishingChanges) return Failure("Inventory cannot be mutated during change notifications");
             var result = ValidateOccupiedSlot(sourceSlotIndex, quantity);
             if (!result.Success) return result;
@@ -216,6 +369,7 @@ namespace UnscriptedEngine
             publishingChanges = true;
             try
             {
+                ReplicateInventory();
                 EventBus.Notify(Changed);
                 EventBus.PublishNotification(new EB_InventoryChanged { Inventory = this });
                 afterChanged?.Invoke();

@@ -56,8 +56,9 @@ namespace UnscriptedEngine
         public bool IsActive => State == InteractionState.Active;
         public bool IsCompleted => State == InteractionState.Completed;
         public GameObject ActiveInteractor => IsSpawned ? ResolveSource(snapshot.Value.Source) : activeSource;
-        protected override bool CanTick => !IsSpawned || IsServer;
-        private bool CanRunAuthoritativeLogic => !IsSpawned || IsServer;
+        protected override bool CanTick => CanRunAuthoritativeLogic;
+        private bool CanRunAuthoritativeLogic => IsSpawned ? IsServer :
+            !(Unity.Netcode.NetworkManager.Singleton != null && Unity.Netcode.NetworkManager.Singleton.IsListening);
 
         protected override void OnSpawned()
         {
@@ -87,6 +88,7 @@ namespace UnscriptedEngine
         {
             if (!isActiveAndEnabled || dispatchingEvents) return false;
             if (CanRunAuthoritativeLogic) return BeginAuthoritative(interactor, Unity.Netcode.NetworkManager.ServerClientId, sessionId);
+            if (!IsSpawned) return false;
             if (!TryCreateSourceReference(interactor, out NetworkObjectReference sourceReference)) return false;
             BeginInteractionRpc(sourceReference, sessionId);
             return true;
@@ -94,6 +96,7 @@ namespace UnscriptedEngine
 
         public void EndInteraction(GameObject interactor, uint sessionId = 0)
         {
+            if (!IsSpawned && !CanRunAuthoritativeLogic) return;
             if (CanRunAuthoritativeLogic)
             {
                 if (activeSource == NormalizeSource(interactor) && activeSessionId == sessionId) InterruptAuthoritative();
@@ -106,6 +109,7 @@ namespace UnscriptedEngine
         /// <summary>Call while held. Timed sessions expire if their interactor stops updating.</summary>
         public void KeepInteractionAlive(GameObject interactor, uint sessionId = 0)
         {
+            if (!IsSpawned && !CanRunAuthoritativeLogic) return;
             if (CanRunAuthoritativeLogic)
             {
                 if (activeSource == NormalizeSource(interactor) && activeSessionId == sessionId) lastHeartbeat = Time.unscaledTime;
