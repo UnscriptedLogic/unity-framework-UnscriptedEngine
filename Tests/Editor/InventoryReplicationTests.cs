@@ -124,6 +124,18 @@ namespace UnscriptedEngine.Tests
             var stack = new UItemFragStack();
             Set(stack, "_stackSize", 4);
             item.fragments.Add(stack);
+            var heldObject = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            heldObject.name = "Held toggle";
+            Object.DestroyImmediate(heldObject.GetComponent<Collider>());
+            heldObject.AddComponent<Light>();
+            var heldPrefab = PrefabUtility.SaveAsPrefabAsset(heldObject, folder + "/Held.prefab");
+            Object.DestroyImmediate(heldObject);
+            var equipFragment = new UItemFragEquip();
+            Set(equipFragment, "visualPrefab", heldPrefab);
+            Set(equipFragment, "anchorPosition", new Vector3(0.1f, -0.1f, 0.3f));
+            Set(equipFragment, "anchorRotation", new Vector3(10, 20, 0));
+            item.fragments.Add(equipFragment);
+            item.fragments.Add(new TestReplicatedItemFragment());
             AssetDatabase.CreateAsset(item, folder + "/Item.asset");
             var pickupObject = new GameObject("Pickup");
             var pickup = pickupObject.AddComponent<UWorldItem>();
@@ -138,8 +150,15 @@ namespace UnscriptedEngine.Tests
             pawnObject.AddComponent<NetworkObject>();
             var inventory = pawnObject.AddComponent<UInventoryComponent>();
             inventory.SetLoggingEnabled(false);
-            var equipment = pawnObject.AddComponent<ItemEquipComponent>();
+            var equipment = pawnObject.AddComponent<TestItemEquipComponent>();
             Set(equipment, "inventoryComponent", inventory);
+            var cameraRig = new GameObject("Owner-only camera rig");
+            cameraRig.transform.SetParent(pawnObject.transform, false);
+            var handAnchor = new GameObject("Hand anchor").transform;
+            handAnchor.SetParent(cameraRig.transform, false);
+            handAnchor.localPosition = new Vector3(0.2f, 0.4f, 0.5f);
+            Set(equipment, "equipAnchor", handAnchor);
+            Set(pawnObject.AddComponent<DisableOnProxy>(), "targets", new[] { cameraRig });
             var pawnPrefab = PrefabUtility.SaveAsPrefabAsset(pawnObject, folder + "/Owner.prefab");
             Object.DestroyImmediate(pawnObject);
             ItemNetworkCatalogBuilder.Rebuild();
@@ -184,12 +203,72 @@ namespace UnscriptedEngine.Tests
                 Assert.That(WorldCount(server), Is.EqualTo(1));
                 Assert.That(clientEquipment.SelectSlot(0), Is.True);
                 yield return Wait(() => owner.GetComponent<ItemEquipComponent>().SelectedSlotIndex == 0, "Selection restored");
+                var serverEquipment = owner.GetComponent<ItemEquipComponent>();
+                yield return Wait(() => State(clientEquipment).Session == State(serverEquipment).Session, "Equipment session");
+                Assert.That(clientEquipment.Use("unknown", true), Is.False);
+                Assert.That(clientEquipment.Use("primary", true), Is.True);
+                yield return Wait(() => IsOn(serverEquipment) && IsOn(clientEquipment), "Owner use and light replication");
+                Assert.That(clientEquipment.Use("primary", false), Is.True);
+                yield return null;
+                Assert.That(IsOn(serverEquipment), Is.True, "Release must not toggle again.");
+                Assert.That(clientEquipment.HeldVisual.activeInHierarchy, Is.True);
+                Assert.That(serverEquipment.HeldVisual.activeInHierarchy, Is.True,
+                    "A remote player's item must stay visible on the host/server despite disabled camera rig.");
+                Assert.That(owner.transform.Find("Owner-only camera rig").gameObject.activeSelf, Is.False);
+                var ownerHand = replica.transform.Find("Owner-only camera rig/Hand anchor");
+                ownerHand.localPosition = new Vector3(0.45f, 0.6f, 0.3f);
+                ownerHand.localRotation = Quaternion.Euler(-25, 60, 5);
+                yield return Wait(() => PoseMatches(clientEquipment, serverEquipment), "Owner hand pose on server proxy");
 
                 late = Manager("Late inventory client", port, pawnPrefab, pickupPrefab);
                 Assert.That(late.StartClient(), Is.True);
                 yield return Wait(() => late.IsConnectedClient && late.SpawnManager.SpawnedObjects.ContainsKey(ownerId), "Late join");
                 var lateInventory = late.SpawnManager.SpawnedObjects[ownerId].GetComponent<UInventoryComponent>();
                 yield return Wait(() => Total(lateInventory) == 1 && WorldCount(late) == 1, "Late join inventory and pickup");
+                var observerEquipment = late.SpawnManager.SpawnedObjects[ownerId].GetComponent<ItemEquipComponent>();
+                yield return Wait(() => IsOn(observerEquipment), "Late join behaviour state");
+                Assert.That(observerEquipment.HeldVisual.activeInHierarchy, Is.True,
+                    "A late observer must see the held mesh under an active pawn hierarchy.");
+                Assert.That(observerEquipment.HeldVisual.GetComponent<MeshRenderer>().enabled, Is.True);
+                Assert.That(observerEquipment.transform.Find("Owner-only camera rig").gameObject.activeSelf, Is.False);
+                Assert.That(observerEquipment.HeldVisual.transform.IsChildOf(observerEquipment.transform.Find("Owner-only camera rig")), Is.False);
+                yield return Wait(() => PoseMatches(clientEquipment, observerEquipment), "Late join hand pose");
+                observerEquipment.transform.SetPositionAndRotation(new Vector3(12, 1, -3), Quaternion.Euler(0, 90, 0));
+                ownerHand.localRotation = Quaternion.Euler(30, -45, 0);
+                yield return Wait(() => PoseMatches(clientEquipment, observerEquipment) && PoseMatches(clientEquipment, serverEquipment),
+                    "Moving beam follows owner hand relative to each proxy pawn");
+                Assert.That(observerEquipment.Use("primary", true), Is.False, "Observer cannot use another player's item.");
+                var stale = State(clientEquipment);
+                Assert.That(clientEquipment.SelectSlot(1), Is.True);
+                yield return Wait(() => serverEquipment.HeldItem == null, "Unequip");
+                Assert.That(clientEquipment.SelectSlot(0), Is.True);
+                yield return Wait(() => serverEquipment.HeldItem != null && State(clientEquipment).Session == State(serverEquipment).Session,
+                    "New equipment session");
+                Assert.That(IsOn(clientEquipment), Is.False, "Re-equipping starts a fresh session.");
+                typeof(ItemEquipComponent).GetMethod("RequestUseRpc", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                    .Invoke(clientEquipment, new object[] { stale.Slot, stale.ItemId, stale.Session,
+                        new Unity.Collections.FixedString64Bytes("primary"), true, false, default(RpcParams) });
+                // Wait for a subsequent valid request to pass the stale request on the same reliable channel.
+                Assert.That(clientEquipment.Use("primary", false), Is.True);
+                yield return new WaitForSeconds(0.2f);
+                Assert.That(IsOn(serverEquipment), Is.False, "Stale session request must be rejected.");
+                Assert.That(clientEquipment.Use("primary", true), Is.True);
+                yield return Wait(() => IsOn(serverEquipment) && IsOn(clientEquipment) && IsOn(observerEquipment), "Toggle after re-equip");
+                Assert.That(clientEquipment.SelectSlot(1), Is.True);
+                yield return Wait(() => serverEquipment.HeldItem == null, "Unequip before queued input");
+                Assert.That(clientEquipment.SelectSlot(0), Is.True);
+                Assert.That(clientEquipment.Use("primary", true), Is.True);
+                Assert.That(clientEquipment.Use("primary", false), Is.True);
+                yield return Wait(() => serverEquipment.SelectedSlotIndex == 0 && IsOn(serverEquipment)
+                    && IsOn(clientEquipment) && IsOn(observerEquipment), "Input queued during selection synchronization");
+                Assert.That(clientEquipment.SelectSlot(1), Is.True);
+                yield return Wait(() => serverEquipment.HeldItem == null, "Unequip before cancelled queued input");
+                Assert.That(clientEquipment.SelectSlot(0), Is.True);
+                Assert.That(clientEquipment.Use("primary", true), Is.True);
+                clientEquipment.CancelUse();
+                yield return Wait(() => serverEquipment.SelectedSlotIndex == 0 && State(clientEquipment).Session == State(serverEquipment).Session,
+                    "Cancelled selection synchronization");
+                Assert.That(IsOn(serverEquipment), Is.False, "Focus cancellation must discard unsent input.");
                 Assert.That(late.SpawnManager.SpawnedObjects[ownerId].GetComponent<ItemEquipComponent>().Drop(Vector3.forward), Is.False,
                     "An observer cannot drop another player's inventory.");
                 serverInventory.SetDropsAllowed(false);
@@ -224,9 +303,33 @@ namespace UnscriptedEngine.Tests
         }
 
         private static int Total(UInventoryComponent inventory) => inventory.Items?.Values.Sum(slot => slot.Quantity) ?? 0;
+        private static bool IsOn(ItemEquipComponent equipment) => equipment.HeldVisual != null
+            && equipment.HeldVisual.GetComponent<Light>().enabled;
+        private static bool PoseMatches(ItemEquipComponent owner, ItemEquipComponent proxy)
+        {
+            if (owner.HeldVisual == null || proxy.HeldVisual == null) return false;
+            Transform source = owner.HeldVisual.transform, target = proxy.HeldVisual.transform;
+            Transform sourceRoot = owner.NetworkObject.transform, targetRoot = proxy.NetworkObject.transform;
+            return Vector3.Distance(sourceRoot.InverseTransformPoint(source.position), targetRoot.InverseTransformPoint(target.position)) < 0.005f
+                && Quaternion.Angle(Quaternion.Inverse(sourceRoot.rotation) * source.rotation,
+                    Quaternion.Inverse(targetRoot.rotation) * target.rotation) < 0.2f;
+        }
+        private static ItemEquipComponent.BehaviourSnapshot State(ItemEquipComponent equipment) =>
+            ((NetworkVariable<ItemEquipComponent.BehaviourSnapshot>)typeof(ItemEquipComponent)
+                .GetField("behaviourState", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .GetValue(equipment)).Value;
         private static int WorldCount(NetworkManager manager) => manager.SpawnManager.SpawnedObjects.Values.Count(obj => obj.GetComponent<UWorldItem>() != null);
-        private static void Set(object target, string name, object value) => target.GetType()
-            .GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).SetValue(target, value);
+        private static void Set(object target, string name, object value)
+        {
+            var type = target.GetType();
+            while (type != null)
+            {
+                var field = type.GetField(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                if (field != null) { field.SetValue(target, value); return; }
+                type = type.BaseType;
+            }
+            throw new MissingFieldException(name);
+        }
         private static NetworkManager Manager(string name, ushort port, params GameObject[] prefabs)
         {
             var obj = new GameObject(name);

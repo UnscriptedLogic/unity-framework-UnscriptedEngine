@@ -43,11 +43,28 @@ Forward normal releases with `pressed: false`. Call `CancelUse` on focus loss or
 | `HeldItem`, `HeldVisual` | Current definition and instantiated visual, if any. |
 | `SelectSlot(index)` | Selects a visible slot and refreshes held state; returns `false` for invalid or unavailable slots. |
 | `SetInventory(inventory)` | Replaces observed inventory and clears selection. |
-| `Use(action, pressed)` | Forwards a press/release to current behaviour when gameplay is ready. |
+| `Use(action, pressed)` | Forwards local use, or queues server-validated use for behaviours opting into replicated state. Client true means consumed, not server acceptance. |
 | `CancelUse()` | Cancels charging/held input without committing an action. Call on focus loss or unpossession. |
 | `Drop(direction, quantity = 1)` | Drops on server/offline; on an owning client, queues a validated server request. Client `true` means queued, not accepted. |
 
 `UItemFragEquip` supplies an optional visual prefab and local position/rotation offsets. Without a visual prefab, a behaviour can still run. The first `UItemFragBehaviour` on the definition creates a fresh behaviour for each equipment session. See [Equipped item behaviours](ItemBehaviours.md) for behaviour authoring and cleanup.
+
+## Held items on remote players
+
+Each peer reconstructs the held prefab from replicated inventory/selection. The owner
+parents its visual to `equipAnchor`. Non-owners (including the host observing a remote
+player) parent theirs to an automatically created anchor beneath the active pawn's
+NetworkObject. This keeps held meshes and lights visible when `DisableOnProxy` turns
+off the first-person camera hierarchy containing the authored anchor.
+
+The owner replicates anchor position and rotation relative to the pawn root. Proxy
+anchors apply that pose plus the item's authored offsets, so aiming moves the remote
+flashlight beam with the owner's hand. Late joiners receive the current anchor pose
+and behaviour state. No extra held-item NetworkObject or prefab registration is
+needed. The pawn's normal movement replication still moves its root.
+
+Authority over use/state remains on the server; the owner-written anchor pose is
+presentation only. Behaviour replication is opt-in as described in ItemBehaviours.
 
 ## Dropping selected items
 
@@ -72,6 +89,7 @@ The selected item must have a configured `UItemFragDrop` world prefab, registere
 - Cleanup calls `CancelUse`, `Unequip`, and `Dispose` before destroying the held visual. Each cleanup callback is attempted even if another throws.
 - Do not switch equipment or replace its inventory from equipment callbacks. Refresh-time selection is rejected; `SetInventory` throws during refresh/cleanup.
 - Inventory slot replication and equipment drop requests are built in for spawned network objects. Save-game persistence and client requests for other inventory mutations remain game responsibilities.
+- Replicated behaviours opt in through `ReplicatesState`, `HandlesAction`, `CaptureState`, and `ApplyState`. Snapshots include item, slot, and session identity, support late joiners, and reset when unequipped. See [Equipped item behaviours](ItemBehaviours.md).
 
 ## Changelog
 

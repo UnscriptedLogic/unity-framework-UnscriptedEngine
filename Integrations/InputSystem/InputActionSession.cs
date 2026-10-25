@@ -28,6 +28,7 @@ namespace UnscriptedEngine.Input
     {
         public string playerMap = "Player", uiMap = "UI";
         public string move = "Move", look = "Look", sprint = "Sprint", jump = "Jump", interact = "Interact";
+        public string primaryUse = "Attack";
         public string escape = "Escape", descend = "Ctrl", inventory = "Tab", aim = "RightClick", throwItem = "Q", console = "Console";
     }
 }

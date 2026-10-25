@@ -31,12 +31,61 @@ public class ItemEquipComponent : UObjectComponent
     private bool refreshing;
     private bool clearing;
     private readonly NetworkVariable<int> selectedSlot = new(-1);
+    private readonly NetworkVariable<BehaviourSnapshot> behaviourState = new();
+    private readonly NetworkVariable<EquipAnchorPose> replicatedAnchor = new(default,
+        NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Owner);
+    private Transform proxyAnchor;
+    private uint equipmentSession;
+    private bool networkUsePending;
+    private bool awaitingSelection;
+    private uint previousSelectionSession;
+    private readonly System.Collections.Generic.Queue<(string Action, bool Pressed)> queuedUse = new();
+
+    public struct BehaviourSnapshot : INetworkSerializable, System.IEquatable<BehaviourSnapshot>
+    {
+        public int Slot;
+        public uint Session;
+        public FixedString64Bytes ItemId;
+        public FixedString4096Bytes State;
+
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref Slot);
+            serializer.SerializeValue(ref Session);
+            serializer.SerializeValue(ref ItemId);
+            serializer.SerializeValue(ref State);
+        }
+
+        public bool Equals(BehaviourSnapshot other) => Slot == other.Slot && Session == other.Session
+            && ItemId.Equals(other.ItemId) && State.Equals(other.State);
+    }
+
+    public struct EquipAnchorPose : INetworkSerializable, System.IEquatable<EquipAnchorPose>
+    {
+        public bool Valid;
+        public Vector3 Position;
+        public Quaternion Rotation;
+
+        public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+        {
+            serializer.SerializeValue(ref Valid);
+            serializer.SerializeValue(ref Position);
+            serializer.SerializeValue(ref Rotation);
+        }
+
+        public bool Equals(EquipAnchorPose other) => Valid == other.Valid
+            && Position.Equals(other.Position) && Rotation.Equals(other.Rotation);
+    }
 
     protected override void OnSpawned()
     {
         base.OnSpawned();
         selectedSlot.OnValueChanged += ApplySelectedSlot;
+        behaviourState.OnValueChanged += ApplyBehaviourState;
+        replicatedAnchor.OnValueChanged += ApplyAnchorPose;
+        UpdateHeldAnchor();
         if (!IsServer) ApplySelectedSlot(-1, selectedSlot.Value);
+        else PublishBehaviourState();
     }
 
     private void ApplySelectedSlot(int previous, int current)
@@ -51,6 +100,67 @@ public class ItemEquipComponent : UObjectComponent
         ? Mathf.Min(Mathf.Max(0, hotbarSize), Mathf.Max(0, inventory.InventorySize)) : 0;
     public ItemDataSO HeldItem => heldItem;
     public GameObject HeldVisual => heldVisual;
+
+    private Transform LocalEquipAnchor => equipAnchor != null ? equipAnchor : transform;
+
+    private Transform GetVisualAnchor()
+    {
+        if (!IsSpawned || IsOwner) return LocalEquipAnchor;
+        if (proxyAnchor == null)
+        {
+            // Camera rigs are commonly disabled on proxies. Their transforms remain
+            // usable as authored fallbacks, but their children cannot be rendered.
+            proxyAnchor = new GameObject("Proxy held item anchor").transform;
+            proxyAnchor.SetParent(NetworkObject.transform, false);
+            proxyAnchor.SetPositionAndRotation(LocalEquipAnchor.position, LocalEquipAnchor.rotation);
+            ApplyAnchorPose(default, replicatedAnchor.Value);
+        }
+        return proxyAnchor;
+    }
+
+    private void UpdateHeldAnchor()
+    {
+        if (!IsSpawned) return;
+        if (IsOwner)
+        {
+            Transform root = NetworkObject.transform;
+            var pose = new EquipAnchorPose
+            {
+                Valid = true,
+                Position = root.InverseTransformPoint(LocalEquipAnchor.position),
+                Rotation = Quaternion.Inverse(root.rotation) * LocalEquipAnchor.rotation
+            };
+            var previous = replicatedAnchor.Value;
+            if (!previous.Valid || (previous.Position - pose.Position).sqrMagnitude > 0.000001f
+                || Quaternion.Angle(previous.Rotation, pose.Rotation) > 0.1f)
+                replicatedAnchor.Value = pose;
+        }
+        else ApplyAnchorPose(default, replicatedAnchor.Value);
+
+        if (heldVisual != null)
+        {
+            Transform anchor = GetVisualAnchor();
+            if (heldVisual.transform.parent != anchor) heldVisual.transform.SetParent(anchor, false);
+        }
+    }
+
+    private void ApplyAnchorPose(EquipAnchorPose previous, EquipAnchorPose current)
+    {
+        if (IsOwner || proxyAnchor == null || !current.Valid || !IsFinite(current.Position)) return;
+        Quaternion rotation = current.Rotation;
+        float length = Quaternion.Dot(rotation, rotation);
+        if (float.IsNaN(length) || float.IsInfinity(length) || length < 0.0001f) return;
+        proxyAnchor.localPosition = current.Position;
+        proxyAnchor.localRotation = rotation.normalized;
+    }
+
+    private void ClearProxyAnchor()
+    {
+        if (proxyAnchor == null) return;
+        if (Application.isPlaying) Destroy(proxyAnchor.gameObject);
+        else DestroyImmediate(proxyAnchor.gameObject);
+        proxyAnchor = null;
+    }
 
     /// <summary>Drop selected items, or queue an owning client's validated server request. Client success means queued.</summary>
     public bool Drop(Vector3 direction, int quantity = 1)
@@ -100,24 +210,108 @@ public class ItemEquipComponent : UObjectComponent
         return true;
     }
 
-    /// <summary>Input mapping and network authority belong to the caller/game behaviour.</summary>
+    /// <summary>Replicated behaviours execute on the server. Client true means input consumed/request queued.</summary>
     public bool Use(string action, bool pressed)
     {
         if (!isActiveAndEnabled || !CanTick || refreshing || clearing || string.IsNullOrEmpty(action)) return false;
-        return heldBehaviour?.Use(action, pressed) ?? false;
+        if (IsSpawned && !IsServer && !IsOwner) return false;
+        if (heldBehaviour == null) return false;
+        if (!heldBehaviour.ReplicatesState) return heldBehaviour.Use(action, pressed);
+        if (!heldBehaviour.HandlesAction(action) || System.Text.Encoding.UTF8.GetByteCount(action) > 61) return false;
+        if (IsSpawned && !IsServer)
+        {
+            if (IsUseSessionReady())
+            {
+                RequestUseRpc(heldSlotIndex, heldItem.NetworkId, behaviourState.Value.Session, action, pressed, false);
+                networkUsePending = true;
+            }
+            else if (queuedUse.Count < 16) queuedUse.Enqueue((action, pressed));
+            return true;
+        }
+        bool handled = heldBehaviour.Use(action, pressed);
+        PublishBehaviourState();
+        return handled;
     }
 
     /// <summary>Call on input focus loss or unpossession, even when gameplay input is blocked.</summary>
-    public void CancelUse() => heldBehaviour?.CancelUse();
+    public void CancelUse()
+    {
+        queuedUse.Clear();
+        if (IsSpawned && !IsServer)
+        {
+            if (!IsOwner) return;
+            if (networkUsePending && heldBehaviour?.ReplicatesState == true && MatchesHeldItem(behaviourState.Value))
+                RequestUseRpc(heldSlotIndex, heldItem.NetworkId, behaviourState.Value.Session, default, false, true);
+        }
+        networkUsePending = false;
+        heldBehaviour?.CancelUse();
+        PublishBehaviourState();
+    }
 
-    protected override void Tick(float deltaTime) => heldBehaviour?.Tick(deltaTime);
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestUseRpc(int slot, FixedString64Bytes expectedItem, uint session,
+        FixedString64Bytes action, bool pressed, bool cancel, RpcParams rpc = default)
+    {
+        if (rpc.Receive.SenderClientId != OwnerClientId || !isActiveAndEnabled || !CanTick
+            || refreshing || clearing || heldBehaviour?.ReplicatesState != true
+            || slot != heldSlotIndex || slot != SelectedSlotIndex || session != equipmentSession
+            || heldItem == null || heldItem.NetworkId != expectedItem.ToString() || GetSelectedItem() != heldItem
+            || inventory is not UInventoryComponent source || !source.IsSpawned
+            || source.OwnerClientId != rpc.Receive.SenderClientId) return;
+        if (cancel) heldBehaviour.CancelUse();
+        else if (heldBehaviour.HandlesAction(action.ToString())) heldBehaviour.Use(action.ToString(), pressed);
+        PublishBehaviourState();
+    }
+
+    private bool MatchesHeldItem(BehaviourSnapshot state) => state.Session != 0 && heldItem != null
+        && state.Slot == heldSlotIndex && state.ItemId.ToString() == heldItem.NetworkId;
+
+    private bool IsUseSessionReady() => MatchesHeldItem(behaviourState.Value)
+        && (!awaitingSelection || behaviourState.Value.Session != previousSelectionSession);
+
+    private void PublishBehaviourState()
+    {
+        if (!IsSpawned || !IsServer) return;
+        behaviourState.Value = new BehaviourSnapshot
+        {
+            Slot = heldSlotIndex,
+            Session = equipmentSession,
+            ItemId = heldItem != null ? heldItem.NetworkId : string.Empty,
+            State = heldBehaviour?.ReplicatesState == true ? heldBehaviour.CaptureState() : string.Empty
+        };
+    }
+
+    private void ApplyBehaviourState(BehaviourSnapshot previous, BehaviourSnapshot current)
+    {
+        if (IsServer || heldBehaviour?.ReplicatesState != true || !IsUseSessionReady()) return;
+        heldBehaviour.ApplyState(current.State.ToString());
+        awaitingSelection = false;
+        if (!IsOwner || !CanTick) return;
+        while (queuedUse.Count > 0)
+        {
+            var input = queuedUse.Dequeue();
+            RequestUseRpc(heldSlotIndex, heldItem.NetworkId, current.Session, input.Action, input.Pressed, false);
+            networkUsePending = true;
+        }
+    }
+
+    protected override void Tick(float deltaTime)
+    {
+        UpdateHeldAnchor();
+        heldBehaviour?.Tick(deltaTime);
+        PublishBehaviourState();
+    }
     protected override void FixedTick(float deltaTime) => heldBehaviour?.FixedTick(deltaTime);
 
     protected override void OnDespawned()
     {
+        awaitingSelection = false;
         selectedSlot.OnValueChanged -= ApplySelectedSlot;
+        behaviourState.OnValueChanged -= ApplyBehaviourState;
+        replicatedAnchor.OnValueChanged -= ApplyAnchorPose;
         StopObservingInventory();
         ClearHeldVisual();
+        ClearProxyAnchor();
         base.OnDespawned();
     }
 
@@ -154,6 +348,7 @@ public class ItemEquipComponent : UObjectComponent
     {
         StopObservingInventory();
         ClearHeldVisual();
+        ClearProxyAnchor();
         base.OnDestroyed();
     }
 
@@ -174,6 +369,7 @@ public class ItemEquipComponent : UObjectComponent
     public void SetInventory(IInventory newInventory)
     {
         if (refreshing || clearing) throw new System.InvalidOperationException("Cannot replace inventory during equipment callbacks.");
+        awaitingSelection = false;
         StopObservingInventory();
         inventory = newInventory;
         inventoryComponent = newInventory as Component;
@@ -220,6 +416,11 @@ public class ItemEquipComponent : UObjectComponent
             return false;
         }
         if (debug) Log($"Selecting slot {slotIndex}; previous slot {SelectedSlotIndex}.");
+        if (IsSpawned && !IsServer && SelectedSlotIndex != slotIndex)
+        {
+            awaitingSelection = true;
+            previousSelectionSession = behaviourState.Value.Session;
+        }
         SelectedSlotIndex = slotIndex;
         if (IsSpawned)
         {
@@ -242,6 +443,8 @@ public class ItemEquipComponent : UObjectComponent
         refreshing = true;
         try { RefreshHeldItemInternal(); }
         finally { refreshing = false; }
+        if (IsServer) PublishBehaviourState();
+        else ApplyBehaviourState(default, behaviourState.Value);
     }
 
     private void RefreshHeldItemInternal()
@@ -254,11 +457,16 @@ public class ItemEquipComponent : UObjectComponent
         if (item != null && item == heldItem && heldSlotIndex == SelectedSlotIndex
             && (heldVisual != null || FindEquipFragment(item)?.VisualPrefab == null)) return;
         ClearHeldVisual();
+        if (!IsSpawned || IsServer)
+        {
+            unchecked { equipmentSession++; }
+            if (equipmentSession == 0) equipmentSession++;
+        }
         if (!isActiveAndEnabled || item == null) return;
         UItemFragEquip fragment = FindEquipFragment(item);
         if (fragment != null && fragment.VisualPrefab != null)
         {
-            Transform anchor = equipAnchor != null ? equipAnchor : transform;
+            Transform anchor = GetVisualAnchor();
             heldVisual = Instantiate(fragment.VisualPrefab, anchor, false);
             heldVisual.transform.localPosition = fragment.AnchorPosition;
             heldVisual.transform.localRotation = Quaternion.Euler(fragment.AnchorRotation);
@@ -314,6 +522,8 @@ public class ItemEquipComponent : UObjectComponent
     {
         // Detach first: callbacks can disable/destroy this component recursively.
         ItemBehaviour behaviour = heldBehaviour;
+        queuedUse.Clear();
+        networkUsePending = false;
         GameObject visual = heldVisual;
         heldBehaviour = null;
         heldVisual = null;

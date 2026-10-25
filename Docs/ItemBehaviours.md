@@ -36,13 +36,50 @@ existing visual-only items need no changes.
 Equip may run before network spawn, matching existing held-visual setup. Use it for
 binding/presentation only. Tick, FixedTick and Use follow UObjectComponent gameplay
 readiness. Shared ticks run on server and clients: game-specific behaviour must choose
-authority using context.Equipment.IsServer/IsOwner. Behaviour actions do not replicate or
-receive server validation; spawned UInventoryComponent contents replicate separately.
+authority using context.Equipment.IsServer/IsOwner. Behaviours can opt into server use
+and state replication as described below; spawned UInventoryComponent contents replicate separately.
 
 Pawn/input adapters call `equipment.Use("primary", pressed)` (or another game-defined
 action name). A true result means the behaviour handled the input. Call CancelUse on
 focus loss or unpossession; do not turn cancelled input into a release that fires an
 action. Core has no keyboard binding or Input System dependency.
+
+## Replicated behaviour sessions
+
+Override `ReplicatesState => true`, `HandlesAction(string)`, `CaptureState()`, and
+`ApplyState(string)` to opt in. `HandlesAction` must be a side-effect-free check so
+the owning client can consume input without executing gameplay. `Use` then executes
+only on the server. Existing behaviours default to local use for compatibility.
+
+`CaptureState` returns a compact string (up to 4093 UTF-8 bytes); JSON is suitable for
+structured state. The server captures after use, cancellation, refresh, and shared
+Tick, so changes from Tick/FixedTick also reach clients. Netcode sends changed
+snapshots. `ApplyState` updates presentation on clients, including late joiners.
+Server behaviours must update their own presentation for a host. Shared Tick and
+FixedTick still run on every peer; explicitly guard authoritative simulation with
+`context.Equipment.IsServer`. Never mutate state inside `CaptureState`.
+
+Use requests carry slot, item ID, and server equipment-session ID. The server checks
+equipment/inventory ownership, gameplay readiness, current item/session, and supported
+action. Observers cannot use another player's equipment. Client `Use` returning true
+means input consumed, not server acceptance. Up to 16 input edges are queued while a
+predicted selection waits for its new server session; cancellation, unequip, or another
+selection discards unsent input. Stale requests are rejected by the server.
+`CancelUse` forwards cancellation once for pending owner use and cancels local input.
+
+Held prefabs are instantiated locally from replicated inventory and selection; no
+NetworkObject is required on these visuals. Register item definitions in the item
+catalog. The owner uses the authored equip anchor; non-owners use a separate anchor
+under the active network root, so disabling an owner-only camera rig cannot hide
+their held item. Owner anchor position/rotation replicate relative to the pawn root,
+including the current pose for late joiners. Item fragment offsets apply on every
+peer. Pawn movement still needs its normal transform replication. Equipment does not replicate arbitrary
+MonoBehaviour fields or execute arbitrary code remotely.
+
+The default project pawn routes configured `PlayerActionNames.primaryUse` (default
+`Player/Attack`, already bound to left mouse button) to `Use("primary", pressed)` at
+priority 10, consuming handled events before lower-priority gameplay subscribers.
+Blocked input, cursor release, and unpossession cancel held use.
 
 Equipment callbacks must not switch equipment or replace its inventory. Refresh-time
 SelectSlot returns false; SetInventory throws. Inventory Changed callbacks also prohibit
@@ -89,6 +126,17 @@ public sealed class FlashlightBehaviour : ItemBehaviour
 {
     private readonly Light beam;
     private readonly float intensity;
+    private bool isOn;
+    private bool primaryHeld;
+
+    public override bool ReplicatesState => true;
+    public override bool HandlesAction(string action) => action == "primary";
+    public override string CaptureState() => isOn ? "1" : "0";
+    public override void ApplyState(string state)
+    {
+        isOn = state == "1";
+        if (beam != null) beam.enabled = isOn;
+    }
 
     public FlashlightBehaviour(Light beam, float intensity)
     {
@@ -104,10 +152,13 @@ public sealed class FlashlightBehaviour : ItemBehaviour
 
     public override bool Use(string action, bool pressed)
     {
-        if (action != "primary" || beam == null) return false;
-        if (pressed) beam.enabled = !beam.enabled;
+        if (!HandlesAction(action) || beam == null) return false;
+        if (pressed && !primaryHeld) beam.enabled = isOn = !isOn;
+        primaryHeld = pressed;
         return true;
     }
+
+    public override void CancelUse() => primaryHeld = false;
 
     public override void Unequip()
     {
@@ -117,8 +168,8 @@ public sealed class FlashlightBehaviour : ItemBehaviour
 ```
 
 Assign the held prefab in UItemFragEquip, attach FlashlightVisual and assign its Light,
-then add FlashlightFragment. This example toggles local presentation; multiplayer
-synchronization remains game policy.
+then add FlashlightFragment. Primary press toggles server state; release is consumed
+without toggling. Each client applies the replicated light state.
 
 ## State lifetime
 
