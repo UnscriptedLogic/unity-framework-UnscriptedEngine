@@ -1,3 +1,5 @@
+using System.Collections;
+using UnityEngine.TestTools;
 using System;
 using NUnit.Framework;
 using UnityEngine;
@@ -7,38 +9,35 @@ using UnscriptedEngine.UI;
 
 namespace UnscriptedEngine.Tests
 {
-    public sealed class WidgetProbe : UWidgetComponent
-    {
-        public bool Consume;
-        public int Calls;
-        public int Messages;
-        public override bool HandleInput(PlayerInputEvent input) { Calls++; return Consume; }
-        protected override bool HandleMessage<T>(UWidgetComponent source, T message) { Messages++; return Consume; }
-    }
-    public sealed class ScreenProbe : UCanvasComponent
-    {
-        public int Messages;
-        public override CanvasInputPolicy InputPolicy => CanvasInputPolicy.Modal;
-        protected override bool HandleMessage<T>(UWidgetComponent source, T message) { Messages++; return true; }
-    }
     public class WidgetCompositionTests
     {
         private GameObject owner;
         private GameObject events;
         private UCanvasController controller;
         private ScreenProbe screen;
-        [SetUp] public void Setup()
+        [UnitySetUp] public IEnumerator Setup()
         {
+            yield return new EnterPlayMode();
+
             owner = new GameObject("Owner", typeof(CanvasTestController));
-            controller = UCanvasController.Create(owner.GetComponent<CanvasTestController>());
+            CanvasTestController player = owner.GetComponent<CanvasTestController>();
+            Assert.That(player, Is.Not.Null, "Runtime test controller could not be attached.");
+            controller = UCanvasController.Create(player);
             events = new GameObject("Event system", typeof(EventSystem));
             screen = controller.CreateCanvas<ScreenProbe>();
         }
-        [TearDown] public void Cleanup()
+        [UnityTearDown] public IEnumerator Cleanup()
         {
-            UnityEngine.Object.DestroyImmediate(controller.gameObject);
-            UnityEngine.Object.DestroyImmediate(events);
-            UnityEngine.Object.DestroyImmediate(owner);
+            if (controller != null) UnityEngine.Object.DestroyImmediate(controller.gameObject);
+            if (events != null) UnityEngine.Object.DestroyImmediate(events);
+            if (owner != null) UnityEngine.Object.DestroyImmediate(owner);
+
+            controller = null;
+            events = null;
+            owner = null;
+            screen = null;
+
+            yield return new ExitPlayMode();
         }
         private WidgetProbe Widget(Transform parent)
         {

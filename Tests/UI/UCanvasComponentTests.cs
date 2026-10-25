@@ -1,3 +1,5 @@
+using System.Collections;
+using UnityEngine.TestTools;
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
@@ -8,30 +10,10 @@ using UnscriptedEngine.UI;
 
 namespace UnscriptedEngine.Tests
 {
-    public sealed class CanvasTestController : UController { }
     public sealed class CanvasTestInput : PlayerInputEvent
     {
         public CanvasTestInput(UController controller) : base(controller) { }
     }
-    public sealed class CanvasTestWidget : UCanvasComponent
-    {
-        public CanvasLayer TestLayer = CanvasLayer.Screen;
-        public CanvasInputPolicy Policy = CanvasInputPolicy.Modal;
-        public Action<CanvasTestWidget> OnInput;
-        public int Calls;
-        public bool Initialized;
-        public bool ShownAfterInitialization;
-        public override CanvasLayer Layer => TestLayer;
-        public override CanvasInputPolicy InputPolicy => Policy;
-        protected override void OnShown() => ShownAfterInitialization = Initialized && Controller != null;
-        public override bool HandleInput(PlayerInputEvent input)
-        {
-            Calls++;
-            OnInput?.Invoke(this);
-            return false;
-        }
-    }
-
     public class UCanvasControllerTests
     {
         private readonly List<GameObject> objects = new();
@@ -46,23 +28,39 @@ namespace UnscriptedEngine.Tests
             return obj;
         }
 
-        [SetUp] public void Setup()
+        [UnitySetUp] public IEnumerator Setup()
         {
+            yield return new EnterPlayMode();
+
             controller = Create("Controller", typeof(CanvasTestController)).GetComponent<CanvasTestController>();
             canvas = Create("Canvas", typeof(RectTransform), typeof(UCanvasController)).GetComponent<UCanvasController>();
+            Assert.That(controller, Is.Not.Null, "Runtime test controller could not be attached.");
+            Assert.That(canvas, Is.Not.Null);
             canvas.Initialize(controller);
             canvas.RegisterInput<CanvasTestInput>();
             prefab = Create("Prefab", typeof(RectTransform), typeof(CanvasTestWidget)).GetComponent<CanvasTestWidget>();
+            Assert.That(prefab, Is.Not.Null, "Runtime test screen could not be attached.");
             prefab.gameObject.SetActive(false);
         }
 
-        [TearDown] public void Cleanup()
+        [UnityTearDown] public IEnumerator Cleanup()
         {
             for (int i = objects.Count - 1; i >= 0; i--)
                 if (objects[i] != null) UnityEngine.Object.DestroyImmediate(objects[i]);
             objects.Clear();
+            canvas = null;
+            controller = null;
+            prefab = null;
+
+            yield return new ExitPlayMode();
         }
 
+        [Test] public void NullOwnerFactoryDoesNotCreateOrLeakRoot()
+        {
+            int before = Resources.FindObjectsOfTypeAll<UCanvasController>().Length;
+            Assert.Throws<ArgumentNullException>(() => UCanvasController.Create(null));
+            Assert.That(Resources.FindObjectsOfTypeAll<UCanvasController>().Length, Is.EqualTo(before));
+        }
         [Test] public void NewestModalSwallowsAndClosingDoesNotReachOlderWidget()
         {
             var older = canvas.Show(prefab);
@@ -212,12 +210,13 @@ namespace UnscriptedEngine.Tests
                 Is.EqualTo("Modal backdrop"));
         }
 
-        [Test] public void FailedInitializationLeavesNoWidgetOrFocusLease()
+        [UnityTest] public IEnumerator FailedInitializationLeavesNoWidgetOrFocusLease()
         {
             Assert.Throws<InvalidOperationException>(() => canvas.Show(prefab,
                 _ => throw new InvalidOperationException("Initialization failed")));
             Assert.That(canvas.FocusedCanvas, Is.Null);
             Assert.That(InputFocus.IsBlocked(controller), Is.False);
+            yield return null; // Destroy completes at the end of the frame in Play Mode.
             Assert.That(canvas.GetComponentsInChildren<UCanvasComponent>(true), Is.Empty);
         }
     }

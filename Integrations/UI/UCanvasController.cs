@@ -42,23 +42,31 @@ namespace UnscriptedEngine.UI
 
         public static UCanvasController Create(UController owner)
         {
+            if (owner == null) throw new ArgumentNullException(nameof(owner));
+
             GameObject root = new GameObject("Player UI", typeof(RectTransform));
-            root.layer = LayerMask.NameToLayer("UI");
+            try
+            {
+                root.layer = LayerMask.NameToLayer("UI");
+                UCanvasController controller = root.AddComponent<UCanvasController>();
+                root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+                root.GetComponent<Canvas>().sortingOrder = 100;
 
-            UCanvasController controller = root.AddComponent<UCanvasController>();
-            root.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-            root.GetComponent<Canvas>().sortingOrder = 100;
+                CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920, 1080);
+                scaler.matchWidthOrHeight = 1;
 
-            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920, 1080);
-            scaler.matchWidthOrHeight = 1;
-
-            controller.Initialize(owner);
-
-            return controller;
+                controller.Initialize(owner);
+                return controller;
+            }
+            catch
+            {
+                root.SetActive(false);
+                DestroyOwnedObject(root);
+                throw;
+            }
         }
-
         public void BindToggle<T>(string actionKey, T prefab, Action<T> initialize = null,
             bool allowDuringModal = false) where T : UCanvasComponent =>
             Bind(actionKey, () => Show(prefab, initialize), true, allowDuringModal);
@@ -463,4 +471,3 @@ namespace UnscriptedEngine.UI
         }
     }
 }
-

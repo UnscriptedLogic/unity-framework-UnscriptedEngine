@@ -1,0 +1,9 @@
+{
+  "name": "UnscriptedEngine.UI.Tests.Support",
+  "references": ["UnscriptedEngine", "UnscriptedEngine.UI", "Unity.Netcode.Runtime", "UnityEngine.UI"],
+  "includePlatforms": [],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "UNSCRIPTED_UGUI"],
+  "optionalUnityReferences": ["TestAssemblies"],
+  "versionDefines": [{"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"}]
+}
