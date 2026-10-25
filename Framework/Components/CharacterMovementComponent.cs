@@ -284,7 +284,6 @@ namespace UnscriptedEngine
             base.Awake();
             characterController = GetComponent<CharacterController>();
             ConfigureCharacterController();
-            AllocatePredictionBuffers();
         }
 
         private void OnValidate()
@@ -328,6 +327,13 @@ namespace UnscriptedEngine
             base.OnDespawned();
         }
 
+        public override void OnLostOwnership()
+        {
+            base.OnLostOwnership();
+            inputBuffer = null;
+            stateBuffer = null;
+        }
+
         protected override void FixedTick(float fixedDeltaTime)
         {
             if (!IsSpawned)
@@ -339,6 +345,7 @@ namespace UnscriptedEngine
 
             if (IsOwner)
             {
+                AllocatePredictionBuffers();
                 CharacterMoveInput input = CreateMoveInput();
                 StoreInput(input);
                 Vector3 positionBeforeMove = transform.position;
@@ -610,6 +617,7 @@ namespace UnscriptedEngine
 
         private void ReconcileOwner(CharacterMoveState authoritativeState)
         {
+            AllocatePredictionBuffers();
             if (authoritativeState.Tick <= lastReceivedServerTick)
             {
                 return;
@@ -678,8 +686,10 @@ namespace UnscriptedEngine
         private void AllocatePredictionBuffers()
         {
             predictionBufferSize = Mathf.Max(32, predictionBufferSize);
-            inputBuffer = new CharacterMoveInput[predictionBufferSize];
-            stateBuffer = new CharacterMoveState[predictionBufferSize];
+            if (inputBuffer == null || inputBuffer.Length != predictionBufferSize)
+                inputBuffer = new CharacterMoveInput[predictionBufferSize];
+            if (stateBuffer == null || stateBuffer.Length != predictionBufferSize)
+                stateBuffer = new CharacterMoveState[predictionBufferSize];
         }
 
         private void ResetPredictionState()
@@ -694,7 +704,17 @@ namespace UnscriptedEngine
             isGrounded = characterController != null && characterController.isGrounded;
             pendingVerticalMoveInput = 0f;
             ResetFixedPositionSamples(transform.position);
-            AllocatePredictionBuffers();
+            if (IsOwner)
+            {
+                AllocatePredictionBuffers();
+                Array.Clear(inputBuffer, 0, inputBuffer.Length);
+                Array.Clear(stateBuffer, 0, stateBuffer.Length);
+            }
+            else
+            {
+                inputBuffer = null;
+                stateBuffer = null;
+            }
         }
 
         private int BufferIndex(int tick)

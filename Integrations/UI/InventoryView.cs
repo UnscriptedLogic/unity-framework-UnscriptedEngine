@@ -72,12 +72,13 @@ public class InventoryView : UCanvasComponent
         if (slotCountText != null)
             slotCountText.text = $"{_inventory.Items?.Count ?? 0} / {_inventory.InventorySize} slots";
 
-        foreach (var slot in _slots)
-            if (slot != null) slot.SetSlot(null);
-
-        if (_inventory.Items == null) return;
-        foreach (KeyValuePair<int, InventorySlot> kvp in _inventory.Items)
-            if (kvp.Key >= 0 && kvp.Key < _slots.Length && _slots[kvp.Key] != null) _slots[kvp.Key].SetSlot(kvp.Value);
+        var items = _inventory.Items;
+        for (int i = 0; i < _slots.Length; i++)
+        {
+            InventorySlot value = null;
+            if (items != null) items.TryGetValue(i, out value);
+            if (_slots[i] != null) _slots[i].SetSlot(value);
+        }
     }
 }
 

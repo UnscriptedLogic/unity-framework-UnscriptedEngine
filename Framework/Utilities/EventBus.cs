@@ -14,14 +14,26 @@ namespace UnscriptedEngine
 
     public static class EventBus
     {
-        private static readonly Dictionary<Type, List<ListenerEntry>> _listeners = new();
+        private static readonly Dictionary<Type, ListenerList> _listeners = new();
         private static long _nextSubscriptionOrder;
+        private static System.Runtime.CompilerServices.ConditionalWeakTable<Delegate, Delegate[]> invocationLists = new();
+        private static Delegate[] GetInvocationList(Delegate callback) => callback.GetInvocationList();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Delegate, Delegate[]>.CreateValueCallback
+            createInvocationList = GetInvocationList;
+
+        private sealed class ListenerList : List<ListenerEntry>
+        {
+            private ListenerEntry[] snapshot;
+            public ListenerEntry[] Snapshot => snapshot ??= ToArray();
+            public void Invalidate() => snapshot = null;
+        }
 
         // Subscriptions belong to one play session, including managed and static callbacks.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetSessionState()
         {
             _listeners.Clear();
+            invocationLists = new();
             _nextSubscriptionOrder = 0;
         }
 
@@ -59,7 +71,7 @@ namespace UnscriptedEngine
             var type = typeof(T);
             if (!_listeners.TryGetValue(type, out var listeners))
             {
-                listeners = new List<ListenerEntry>();
+                listeners = new ListenerList();
                 _listeners[type] = listeners;
             }
 
@@ -100,6 +112,7 @@ namespace UnscriptedEngine
                 }
             }
 
+            listeners.Invalidate();
             listeners.Add(new ListenerEntry(listener, priority, _nextSubscriptionOrder++));
             listeners.Sort(CompareListeners);
             _listeners[type] = listeners;
@@ -120,6 +133,7 @@ namespace UnscriptedEngine
             {
                 if (listeners[i].Callback.Equals(listener))
                 {
+                    listeners.Invalidate();
                     listeners.RemoveAt(i);
                     break;
                 }
@@ -142,7 +156,7 @@ namespace UnscriptedEngine
 
             RemoveDeadListeners(type, listeners);
 
-            foreach (var listener in listeners.ToArray())
+            foreach (var listener in listeners.Snapshot)
             {
                 if (!IsDeadUnityObject(listener.Callback.Target))
                 {
@@ -167,7 +181,7 @@ namespace UnscriptedEngine
         public static void Notify<T>(Action<T> subscribers, T value)
         {
             if (subscribers == null) return;
-            foreach (Action<T> subscriber in subscribers.GetInvocationList())
+            foreach (Action<T> subscriber in invocationLists.GetValue(subscribers, createInvocationList))
             {
                 if (IsDeadUnityObject(subscriber.Target)) continue;
                 try { subscriber(value); }
@@ -178,7 +192,7 @@ namespace UnscriptedEngine
         public static void Notify(Action subscribers)
         {
             if (subscribers == null) return;
-            foreach (Action subscriber in subscribers.GetInvocationList())
+            foreach (Action subscriber in invocationLists.GetValue(subscribers, createInvocationList))
             {
                 if (IsDeadUnityObject(subscriber.Target)) continue;
                 try { subscriber(); }
@@ -192,16 +206,17 @@ namespace UnscriptedEngine
                 throw new ArgumentException("Cancellable events must use Publish.", nameof(eventData));
             if (!_listeners.TryGetValue(typeof(T), out var listeners)) return;
             RemoveDeadListeners(typeof(T), listeners);
-            foreach (var listener in listeners.ToArray())
+            foreach (var listener in listeners.Snapshot)
                 Notify((Action<T>)listener.Callback, eventData);
         }
 
-        private static void RemoveDeadListeners(Type type, List<ListenerEntry> listeners)
+        private static void RemoveDeadListeners(Type type, ListenerList listeners)
         {
             for (var i = listeners.Count - 1; i >= 0; i--)
             {
                 if (IsDeadUnityObject(listeners[i].Callback.Target))
                 {
+                    listeners.Invalidate();
                     listeners.RemoveAt(i);
                 }
             }

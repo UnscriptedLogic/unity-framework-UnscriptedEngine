@@ -125,8 +125,9 @@ namespace UnscriptedEngine
         {
             if (!isActiveAndEnabled) return;
             updateRegistrationActive = true;
-            UpdateManager.RegisterUpdate(this, DispatchUpdate, TickOrder);
-            UpdateManager.RegisterFixedUpdate(this, DispatchFixedUpdate, TickOrder);
+            var channels = TickCapabilities.For(GetType(), typeof(UObjectComponent));
+            if (channels.Update) UpdateManager.RegisterUpdate(this, DispatchUpdate, TickOrder);
+            if (channels.Fixed) UpdateManager.RegisterFixedUpdate(this, DispatchFixedUpdate, TickOrder);
         }
 
         /// <summary>Authority work on servers and hosts, after the shared Tick.</summary>

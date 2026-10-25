@@ -67,13 +67,13 @@ namespace UnscriptedEngine
         // Checks availability without modifying the inventory or publishing events.
         public OperationResult CanAddItem(ItemDataSO itemDataSo, int quantity = 1)
         {
-            return PlanAddItem(itemDataSo, quantity, out _);
+            return PlanAddItem(itemDataSo, quantity, out _, false);
         }
 
         private OperationResult PlanAddItem(ItemDataSO item, int quantity,
-            out List<KeyValuePair<int, int>> additions)
+            out List<KeyValuePair<int, int>> additions, bool recordAdditions = true)
         {
-            additions = new List<KeyValuePair<int, int>>();
+            additions = null;
             if (slots == null) return Failure("Inventory is not initialized");
             if (item == null) return Failure("Item data is null");
             if (quantity <= 0) return Failure("Quantity must be greater than zero");
@@ -87,13 +87,16 @@ namespace UnscriptedEngine
                 return Failure("Quantity exceeds the single slot capacity");
 
             int remaining = quantity;
+            int firstIndex = -1;
+            if (recordAdditions) additions = new List<KeyValuePair<int, int>>();
             // Fill existing stacks before allocating new slots.
             for (int i = 0; i < inventorySize && remaining > 0; i++)
             {
                 if (!slots.TryGetValue(i, out var slot) || slot.Item != item) continue;
                 int amount = Math.Min(remaining, Math.Max(0, capacity - slot.Quantity));
                 if (amount == 0) continue;
-                additions.Add(new KeyValuePair<int, int>(i, amount));
+                if (firstIndex < 0) firstIndex = i;
+                additions?.Add(new KeyValuePair<int, int>(i, amount));
                 remaining -= amount;
             }
 
@@ -101,12 +104,13 @@ namespace UnscriptedEngine
             {
                 if (slots.ContainsKey(i)) continue;
                 int amount = Math.Min(remaining, capacity);
-                additions.Add(new KeyValuePair<int, int>(i, amount));
+                if (firstIndex < 0) firstIndex = i;
+                additions?.Add(new KeyValuePair<int, int>(i, amount));
                 remaining -= amount;
             }
 
             if (remaining > 0) return Failure("Not enough inventory capacity");
-            return Success(additions[0].Key, quantity, "Item can be added");
+            return Success(firstIndex, quantity, "Item can be added");
         }
 
         // Removing the final item frees the slot. The default removes one item.

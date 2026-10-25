@@ -107,7 +107,7 @@ public class ItemEquipComponent : UObjectComponent
         StopObservingInventory();
         inventory = newInventory;
         inventoryComponent = newInventory as Component;
-        Log($"Inventory assigned: {newInventory}.");
+        if (debug) Log($"Inventory assigned: {newInventory}.");
         SelectedSlotIndex = -1;
         ClearHeldVisual();
         if (!isActiveAndEnabled) return;
@@ -130,7 +130,7 @@ public class ItemEquipComponent : UObjectComponent
         }
         inventory.Changed += RefreshHeldItem;
         observingInventory = true;
-        Log($"Observing inventory with {inventory.InventorySize} slots; {VisibleSlotCount} hotbar slots available.");
+        if (debug) Log($"Observing inventory with {inventory.InventorySize} slots; {VisibleSlotCount} hotbar slots available.");
     }
 
     private void StopObservingInventory()
@@ -145,10 +145,10 @@ public class ItemEquipComponent : UObjectComponent
     {
         if (refreshing || clearing || !isActiveAndEnabled || slotIndex < 0 || slotIndex >= VisibleSlotCount)
         {
-            Log($"Selection rejected: slot {slotIndex}, available slots {VisibleSlotCount}, active {isActiveAndEnabled}.");
+            if (debug) Log($"Selection rejected: slot {slotIndex}, available slots {VisibleSlotCount}, active {isActiveAndEnabled}.");
             return false;
         }
-        Log($"Selecting slot {slotIndex}; previous slot {SelectedSlotIndex}.");
+        if (debug) Log($"Selecting slot {slotIndex}; previous slot {SelectedSlotIndex}.");
         SelectedSlotIndex = slotIndex;
         RefreshHeldItem();
         return true;
@@ -165,7 +165,7 @@ public class ItemEquipComponent : UObjectComponent
     private void RefreshHeldItemInternal()
     {
         int slotCount = VisibleSlotCount;
-        Log($"Refreshing held item; selected slot {SelectedSlotIndex}, available slots {slotCount}.");
+        if (debug) Log($"Refreshing held item; selected slot {SelectedSlotIndex}, available slots {slotCount}.");
         SelectedSlotIndex = slotCount == 0 ? -1 : Mathf.Clamp(SelectedSlotIndex, 0, slotCount - 1);
         ItemDataSO item = GetSelectedItem();
         if (item != null && item == heldItem && heldSlotIndex == SelectedSlotIndex
@@ -199,7 +199,7 @@ public class ItemEquipComponent : UObjectComponent
             ClearHeldVisual();
             throw;
         }
-        Log($"Equipped {item.name} from slot {heldSlotIndex}.");
+        if (debug) Log($"Equipped {item.name} from slot {heldSlotIndex}.");
     }
 
     private ItemDataSO GetSelectedItem()

@@ -119,8 +119,9 @@ namespace Framework.GameplayTag
 
         private void RebuildRuntimeSets()
         {
-            expandedIds = new HashSet<ulong>();
-            exactIds = new HashSet<ulong>();
+            EnsureRuntimeSetsWithoutRecursion();
+            expandedIds.Clear();
+            exactIds.Clear();
             cachedRevision = GameplayTag.Revision;
 
             for (int i = tags.Count - 1; i >= 0; i--)

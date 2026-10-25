@@ -16,7 +16,20 @@ namespace Framework.GameplayTag
         public string Path => path;
         public string Description => description;
         public GameplayTag Parent => parent;
-        public ulong Id => GameplayTagId.FromPath(path);
+        [NonSerialized] private string hashedPath;
+        [NonSerialized] private ulong cachedId;
+        public ulong Id
+        {
+            get
+            {
+                if (!string.Equals(hashedPath, path, StringComparison.Ordinal))
+                {
+                    hashedPath = path;
+                    cachedId = GameplayTagId.FromPath(path);
+                }
+                return cachedId;
+            }
+        }
 
         public bool IsValid => !string.IsNullOrEmpty(path) && Id != 0;
 

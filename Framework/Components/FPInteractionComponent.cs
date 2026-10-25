@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using UnityEngine;
 
 namespace UnscriptedEngine
@@ -13,10 +12,14 @@ namespace UnscriptedEngine
 
         private UInteractableComponent[] _buttonComponents = Array.Empty<UInteractableComponent>();
         private RaycastHit _hitInfo;
+        private UInteractableComponent target;
+        private bool hasTarget;
 
-        public UInteractableComponent[] ButtonComponents => _buttonComponents;
-        public bool HasAnyButtons => _buttonComponents.Length > 0;
-        public UInteractableComponent FirstButton => _buttonComponents.FirstOrDefault();
+        // Legacy arrays materialize on demand and remain snapshots of this tick.
+        public UInteractableComponent[] ButtonComponents => _buttonComponents ??= new[] { target };
+        public bool HasAnyButtons => hasTarget;
+        public UInteractableComponent FirstButton => _buttonComponents != null
+            ? (_buttonComponents.Length > 0 ? _buttonComponents[0] : null) : target;
         public UInteractableComponent FocusedInteractable => FirstButton;
         public RaycastHit HitInfo => _hitInfo;
 
@@ -39,9 +42,9 @@ namespace UnscriptedEngine
             }
 
             UInteractableComponent button = _hitInfo.collider.GetComponentInParent<UInteractableComponent>();
-            _buttonComponents = button != null && button.isActiveAndEnabled
-                ? new[] { button }
-                : Array.Empty<UInteractableComponent>();
+            hasTarget = button != null && button.isActiveAndEnabled;
+            target = hasTarget ? button : null;
+            _buttonComponents = hasTarget ? null : Array.Empty<UInteractableComponent>();
         }
 
         private Camera ResolveCamera()
@@ -58,6 +61,8 @@ namespace UnscriptedEngine
         private void ClearHit()
         {
             _hitInfo = default;
+            target = null;
+            hasTarget = false;
             _buttonComponents = Array.Empty<UInteractableComponent>();
         }
 
