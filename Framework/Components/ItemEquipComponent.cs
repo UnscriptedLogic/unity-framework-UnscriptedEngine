@@ -100,6 +100,8 @@ public class ItemEquipComponent : UObjectComponent
         ? Mathf.Min(Mathf.Max(0, hotbarSize), Mathf.Max(0, inventory.InventorySize)) : 0;
     public ItemDataSO HeldItem => heldItem;
     public GameObject HeldVisual => heldVisual;
+    /// <summary>Raised after the held item, visual, or selected held slot changes, including unequip.</summary>
+    public event System.Action HeldItemChanged;
 
     private Transform LocalEquipAnchor => equipAnchor != null ? equipAnchor : transform;
 
@@ -440,9 +442,16 @@ public class ItemEquipComponent : UObjectComponent
     private void RefreshHeldItem()
     {
         if (refreshing || clearing || !isActiveAndEnabled) return;
+        ItemDataSO previousItem = heldItem;
+        GameObject previousVisual = heldVisual;
+        int previousSlot = heldSlotIndex;
         refreshing = true;
         try { RefreshHeldItemInternal(); }
-        finally { refreshing = false; }
+        finally
+        {
+            refreshing = false;
+            NotifyHeldItemChanged(previousItem, previousVisual, previousSlot);
+        }
         if (IsServer) PublishBehaviourState();
         else ApplyBehaviourState(default, behaviourState.Value);
     }
@@ -513,9 +522,24 @@ public class ItemEquipComponent : UObjectComponent
     private void ClearHeldVisual()
     {
         if (clearing) return;
+        ItemDataSO previousItem = heldItem;
+        GameObject previousVisual = heldVisual;
+        int previousSlot = heldSlotIndex;
         clearing = true;
         try { ClearHeldVisualInternal(); }
-        finally { clearing = false; }
+        finally
+        {
+            clearing = false;
+            if (!refreshing) NotifyHeldItemChanged(previousItem, previousVisual, previousSlot);
+        }
+    }
+
+    private void NotifyHeldItemChanged(ItemDataSO previousItem, GameObject previousVisual, int previousSlot)
+    {
+        if (ReferenceEquals(previousItem, heldItem) && ReferenceEquals(previousVisual, heldVisual)
+            && previousSlot == heldSlotIndex) return;
+        if (HeldItemChanged == null) return;
+        foreach (System.Action listener in HeldItemChanged.GetInvocationList()) Cleanup(listener);
     }
 
     private void ClearHeldVisualInternal()
