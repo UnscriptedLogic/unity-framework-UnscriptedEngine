@@ -13,6 +13,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         [SerializeField] private int stackSize = 1;
         [SerializeField] private int pickupQuantity = 1;
         [SerializeField] private WorldItemInteraction defaultBehaviour = WorldItemInteraction.PickUp;
+        [SerializeField] private GameObject modelOverride;
         private Vector2 scroll;
 
         [MenuItem("Tools/UnscriptedEngine/Gameplay/Items")]
@@ -46,6 +47,10 @@ namespace UnscriptedEngine.Editor.Scaffolding
             displayName = EditorGUILayout.TextField(new GUIContent("Display name", "Optional. Defaults to item name."), displayName);
             stackSize = EditorGUILayout.IntField("Maximum stack size", stackSize);
 
+            modelOverride = (GameObject)EditorGUILayout.ObjectField(
+                new GUIContent("Model override (optional)", "Prefab or imported 3D model used by both world and held visuals. Leave empty for the default cube."),
+                modelOverride, typeof(GameObject), false);
+
             defaultBehaviour = (WorldItemInteraction)EditorGUILayout.EnumPopup("Default behaviour", defaultBehaviour);
             using (new EditorGUI.DisabledScope(defaultBehaviour != WorldItemInteraction.PickUp))
             {
@@ -55,12 +60,13 @@ namespace UnscriptedEngine.Editor.Scaffolding
             ItemScaffoldPlan plan = new ItemScaffoldPlan
             {
                 name = itemName, folder = AssetDatabase.GetAssetPath(root), displayName = displayName,
-                stackSize = stackSize, pickupQuantity = pickupQuantity, defaultBehaviour = defaultBehaviour
+                stackSize = stackSize, pickupQuantity = pickupQuantity, defaultBehaviour = defaultBehaviour,
+                modelGuid = modelOverride == null ? "" : AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(modelOverride))
             };
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("Files to create", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(string.Join("\n", plan.OutputPaths), MessageType.None);
-            EditorGUILayout.HelpBox("Creates four editable scripts, item data, and separate world/held prefabs with placeholder artwork. Selected interaction behaviour and held behaviour are wired automatically. None performs no default action; Pick Up accepts any interacting object with an inventory. Existing files are never overwritten.", MessageType.Info);
+            EditorGUILayout.HelpBox("Creates four editable scripts, item data, and separate world/held prefabs. Both visuals use the selected model, or a default cube when empty. Selected interaction behaviour and held behaviour are wired automatically. Existing files are never overwritten.", MessageType.Info);
             if (!string.IsNullOrEmpty(ItemScaffoldGeneration.Status))
                 EditorGUILayout.HelpBox(ItemScaffoldGeneration.Status, MessageType.Info);
             bool busy = EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode;

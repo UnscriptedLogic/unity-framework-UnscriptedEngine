@@ -138,6 +138,90 @@ namespace UnscriptedEngine.Tests
             }
         }
 
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ModelOverrideIsSharedByBothPrefabsAndSurvivesSerialization(bool importedModel)
+        {
+            GameObject artwork;
+
+            if (importedModel)
+            {
+                string path = folder + "/Artwork.obj";
+                File.WriteAllText(path, "o Artwork\nv -1 -2 -3\nv 1 -2 -3\nv 1 2 -3\nv -1 2 -3\n"
+                    + "v -1 -2 3\nv 1 -2 3\nv 1 2 3\nv -1 2 3\n"
+                    + "f 1 2 3 4\nf 5 8 7 6\nf 1 5 6 2\nf 4 3 7 8\nf 1 4 8 5\nf 2 6 7 3\n");
+                AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+                artwork = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            }
+            else
+            {
+                GameObject temporary = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                try
+                {
+                    temporary.transform.localPosition = new Vector3(0.3f, -0.2f, 0.1f);
+                    temporary.transform.localRotation = Quaternion.Euler(0f, 25f, 0f);
+                    temporary.transform.localScale = new Vector3(1.5f, 2f, 0.5f);
+                    temporary.AddComponent<Rigidbody>();
+                    artwork = PrefabUtility.SaveAsPrefabAsset(temporary, folder + "/Artwork.prefab");
+                }
+                finally { Object.DestroyImmediate(temporary); }
+            }
+
+            Assert.That(artwork, Is.Not.Null);
+            ItemScaffoldPlan plan = Plan();
+            plan.modelGuid = AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(artwork));
+            plan = JsonUtility.FromJson<ItemScaffoldPlan>(JsonUtility.ToJson(plan));
+
+            Assert.That(plan.ResolveModel(), Is.EqualTo(artwork));
+            ItemScaffoldAssets.Build(plan, typeof(TestItemVisual), typeof(UWorldItem), typeof(TestFragment));
+
+            foreach (string path in new[] { plan.HeldPath, plan.WorldPath })
+            {
+                GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                Assert.That(prefab.transform.childCount, Is.EqualTo(1));
+                GameObject model = prefab.transform.GetChild(0).gameObject;
+                Assert.That(PrefabUtility.GetCorrespondingObjectFromSource(model), Is.EqualTo(artwork));
+                Assert.That(model.transform.localPosition, Is.EqualTo(artwork.transform.localPosition));
+                Assert.That(model.transform.localRotation, Is.EqualTo(artwork.transform.localRotation));
+                Assert.That(model.transform.localScale, Is.EqualTo(artwork.transform.localScale));
+                Assert.That(model.GetComponentInChildren<MeshFilter>().sharedMesh,
+                    Is.EqualTo(artwork.GetComponentInChildren<MeshFilter>().sharedMesh));
+
+                foreach (Collider collider in model.GetComponentsInChildren<Collider>(true))
+                    Assert.That(collider.enabled, Is.False);
+
+                foreach (Rigidbody body in model.GetComponentsInChildren<Rigidbody>(true))
+                {
+                    Assert.That(body.isKinematic, Is.True);
+                    Assert.That(body.useGravity, Is.False);
+                }
+            }
+
+            GameObject world = AssetDatabase.LoadAssetAtPath<GameObject>(plan.WorldPath);
+            BoxCollider pickupCollider = world.GetComponent<BoxCollider>();
+            Renderer renderer = world.GetComponentInChildren<Renderer>();
+            Assert.That(Vector3.Distance(pickupCollider.center, renderer.bounds.center), Is.LessThan(0.001f));
+            Assert.That(Vector3.Distance(pickupCollider.size, renderer.bounds.size), Is.LessThan(0.001f));
+
+            if (!importedModel)
+            {
+                Assert.That(artwork.GetComponent<Collider>().enabled, Is.True);
+                Assert.That(artwork.GetComponent<Rigidbody>().isKinematic, Is.False);
+                Assert.That(artwork.GetComponent<Rigidbody>().useGravity, Is.True);
+            }
+        }
+
+        [Test]
+        public void MissingModelOverrideCannotSilentlyFallBackToCube()
+        {
+            ItemScaffoldPlan plan = Plan();
+            plan.modelGuid = Guid.NewGuid().ToString("N");
+
+            Assert.Throws<ArgumentException>(() => ItemScaffoldAssets.Build(plan,
+                typeof(TestItemVisual), typeof(UWorldItem), typeof(TestFragment)));
+            Assert.That(Directory.GetFiles(folder).Length, Is.Zero);
+        }
+
         [TestCase(WorldItemInteraction.None, 10, true)]
         [TestCase(WorldItemInteraction.PickUp, 0, true)]
         [TestCase(WorldItemInteraction.PickUp, 10, false)]

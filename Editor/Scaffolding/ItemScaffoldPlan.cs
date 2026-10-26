@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using UnityEditor;
+using Unity.Netcode;
+using UnityEngine;
 using UnscriptedEngine.Item;
 
 namespace UnscriptedEngine.Editor.Scaffolding
@@ -17,6 +19,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         public int stackSize = 1;
         public int pickupQuantity = 1;
         public WorldItemInteraction defaultBehaviour = WorldItemInteraction.PickUp;
+        public string modelGuid = "";
         public const string GeneratedNamespace = "Game.Items";
         public static readonly string[] ScriptSuffixes = { "Behaviour", "Fragment", "Visual", "WorldItem" };
 
@@ -47,6 +50,25 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 throw new ArgumentException("Stack size and pickup quantity must be at least one.");
             if (!Enum.IsDefined(typeof(WorldItemInteraction), defaultBehaviour))
                 throw new ArgumentException("Choose a supported default interaction behaviour.");
+
+            ResolveModel();
+        }
+
+        public GameObject ResolveModel()
+        {
+            if (string.IsNullOrEmpty(modelGuid)) return null;
+
+            string path = AssetDatabase.GUIDToAssetPath(modelGuid);
+            GameObject model = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+            if (model == null || !AssetDatabase.IsMainAsset(model) || !PrefabUtility.IsPartOfPrefabAsset(model))
+                throw new ArgumentException("Model override is missing or invalid. Choose a prefab or imported model asset, or clear the override to use a cube.");
+
+            if (model.GetComponentInChildren<NetworkObject>(true) != null
+                || model.GetComponentInChildren<NetworkBehaviour>(true) != null)
+                throw new ArgumentException("Choose an artwork prefab or model without network components. The creator adds networking to the world item root.");
+
+            return model;
         }
 
         public void ValidateNew()

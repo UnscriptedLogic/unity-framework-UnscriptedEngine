@@ -5,6 +5,18 @@ inside Assets, enter an item name, and click **Create Item** once. Missing child
 are created. Display name, stack capacity, and world pickup quantity are optional settings.
 Item names must start with a letter and contain only letters, digits, or underscores.
 
+**Model override (optional)** accepts a prefab or imported model asset (for example,
+FBX or OBJ). Leave it empty to keep the default cube. Both world and held prefabs use
+the same nested artwork asset, preserving its authored position, rotation, scale,
+materials, and hierarchy. Later artwork changes propagate through that shared reference.
+The selection is retained across the compilation/reload step, including asset moves.
+
+The generated world BoxCollider fits the artwork's renderer bounds at creation time;
+adjust it if the artwork changes size afterward. Artwork colliders are disabled and
+rigidbodies made kinematic in both generated instances so the model follows its item.
+The source asset is not edited. Use an artwork prefab without network components;
+the creator supplies networking on the world item root.
+
 Choose **Default behaviour** in the creator (also editable on the world prefab):
 
 - **None:** interaction performs no built-in item action. Existing/custom interaction
@@ -37,14 +49,15 @@ resumes and wires:
 
 - ItemDataSO: details, stack limit, equip fragment referencing the held prefab, and the
   generated behaviour fragment.
-- Held prefab: the generated visual MonoBehaviour and a small placeholder cube. No
-  collider or NetworkObject is added to the held visual.
+- Held prefab: the generated visual MonoBehaviour and the selected model, or a small
+  placeholder cube. No active artwork collider or NetworkObject is added to the held visual.
 - World prefab: NetworkObject, generated UWorldItem subclass, instant/repeatable
-  UInteractableComponent, BoxCollider, and placeholder cube. Pickup references the same
+  UInteractableComponent, BoxCollider, and selected model (or placeholder cube). Pickup references the same
   ItemDataSO and the configured quantity.
 
-Replace the `Model (replace with artwork)` child in each prefab with your artwork.
-Adjust the world's BoxCollider to match. Put gameplay settings on the generated fragment,
+With cube fallback, replace the `Model (replace with artwork)` child in each prefab.
+With a model override, edit the shared artwork asset to update both visuals.
+Adjust the world's BoxCollider if the artwork changes size. Put gameplay settings on the generated fragment,
 presentation references on the visual component, and actual actions in the behaviour.
 The generated Use method deliberately handles no action until you implement one. Connect
 your pawn's actions to ItemEquipComponent.Use and cancellation to CancelUse as described
