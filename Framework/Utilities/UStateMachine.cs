@@ -4,7 +4,8 @@ using Unity.Netcode;
 namespace UnscriptedEngine
 {
     /// <summary>
-    /// Server-authoritative enum state machine. Declare the backing NetworkVariable
+    /// Enum state machine supporting local state or server-authoritative network state.
+    /// For network state, declare the backing NetworkVariable
     /// directly on the owning NetworkBehaviour so NGO discovers and replicates it,
     /// including its current value for late joiners. Construct in Awake and dispose
     /// in OnDestroy. Use an int-backed enum and a server-write/everyone-read variable.
@@ -14,8 +15,18 @@ namespace UnscriptedEngine
         private readonly NetworkBehaviour owner;
         private readonly NetworkVariable<int> state;
         private readonly Func<T, T, bool> canTransition;
-        public T Current => (T)Enum.ToObject(typeof(T), state.Value);
+        private T localState;
+        public T Current => state == null ? localState : (T)Enum.ToObject(typeof(T), state.Value);
         public event Action<T, T> StateChanged;
+
+        /// <summary>Create a local state machine without network ownership requirements.</summary>
+        public UStateMachine(T initialState, Func<T, T, bool> canTransition = null)
+        {
+            if (!Enum.IsDefined(typeof(T), initialState))
+                throw new ArgumentOutOfRangeException(nameof(initialState));
+            localState = initialState;
+            this.canTransition = canTransition;
+        }
 
         public UStateMachine(NetworkBehaviour owner, NetworkVariable<int> replicatedState,
             Func<T, T, bool> canTransition = null)
@@ -30,10 +41,16 @@ namespace UnscriptedEngine
 
         public bool TryTransition(T next)
         {
-            if (!owner.IsSpawned || !owner.IsServer || !Enum.IsDefined(typeof(T), next)
+            if ((state != null && (!owner.IsSpawned || !owner.IsServer)) || !Enum.IsDefined(typeof(T), next)
                 || Current.Equals(next) || (canTransition != null && !canTransition(Current, next)))
                 return false;
-            state.Value = Convert.ToInt32(next);
+            if (state != null) state.Value = Convert.ToInt32(next);
+            else
+            {
+                T previous = localState;
+                localState = next;
+                StateChanged?.Invoke(previous, next);
+            }
             return true;
         }
 
@@ -42,7 +59,7 @@ namespace UnscriptedEngine
 
         public void Dispose()
         {
-            state.OnValueChanged -= HandleChanged;
+            if (state != null) state.OnValueChanged -= HandleChanged;
             StateChanged = null;
         }
     }
