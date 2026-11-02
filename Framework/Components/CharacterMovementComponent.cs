@@ -20,6 +20,7 @@ namespace UnscriptedEngine
             public float ControlYaw;
             public float BodyYaw;
             public bool JumpPressed;
+            public Vector3 ExternalVelocityChange;
             public bool IsFlying;
 
             public bool Equals(CharacterMoveInput other)
@@ -31,6 +32,7 @@ namespace UnscriptedEngine
                     && MoveZ.Equals(other.MoveZ)
                     && ControlYaw.Equals(other.ControlYaw)
                     && BodyYaw.Equals(other.BodyYaw)
+                    && ExternalVelocityChange.Equals(other.ExternalVelocityChange)
                     && JumpPressed == other.JumpPressed
                     && IsFlying == other.IsFlying;
             }
@@ -42,7 +44,7 @@ namespace UnscriptedEngine
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, MoveZ, ControlYaw, JumpPressed, IsFlying), BodyYaw);
+                return HashCode.Combine(HashCode.Combine(Tick, DeltaTime, MoveX, MoveY, MoveZ, ControlYaw, JumpPressed, IsFlying), BodyYaw, ExternalVelocityChange);
             }
         }
 
@@ -146,6 +148,7 @@ namespace UnscriptedEngine
         private Vector2 pendingMoveInput;
         private float pendingVerticalMoveInput;
         private bool jumpQueued;
+        private Vector3 pendingExternalVelocityChange;
         private float controlYaw;
         private Vector3 velocity;
         private bool isGrounded;
@@ -177,6 +180,7 @@ namespace UnscriptedEngine
                 pendingVerticalMoveInput = 0f;
                 jumpQueued = false;
                 velocity = Vector3.zero;
+                pendingExternalVelocityChange = Vector3.zero;
             }
         }
 
@@ -274,9 +278,20 @@ namespace UnscriptedEngine
             jumpQueued = true;
         }
 
+        /// <summary>Queue an impulse for the next owner step, including server simulation and prediction replay.</summary>
+        public void QueueExternalVelocityChange(Vector3 change)
+        {
+            if (!IsOwner || IsMovementLocked) return;
+            if (float.IsNaN(change.x) || float.IsInfinity(change.x)
+                || float.IsNaN(change.y) || float.IsInfinity(change.y)
+                || float.IsNaN(change.z) || float.IsInfinity(change.z)) return;
+            pendingExternalVelocityChange = Vector3.ClampMagnitude(pendingExternalVelocityChange + change, 100f);
+        }
+
         public void StopMovementImmediately()
         {
             velocity = Vector3.zero;
+            pendingExternalVelocityChange = Vector3.zero;
         }
 
         protected override void Awake()
@@ -417,9 +432,11 @@ namespace UnscriptedEngine
                 ControlYaw = controlYaw,
                 BodyYaw = transform.eulerAngles.y,
                 JumpPressed = jumpQueued,
+                ExternalVelocityChange = pendingExternalVelocityChange,
                 IsFlying = isFlying
             };
 
+            pendingExternalVelocityChange = Vector3.zero;
             localTick++;
             return SanitizeInput(input);
         }
@@ -430,8 +447,14 @@ namespace UnscriptedEngine
             {
                 input.MoveX = input.MoveY = input.MoveZ = 0f;
                 input.JumpPressed = false;
+                input.ExternalVelocityChange = Vector3.zero;
                 input.IsFlying = false;
             }
+            Vector3 change = input.ExternalVelocityChange;
+            input.ExternalVelocityChange = float.IsNaN(change.x) || float.IsInfinity(change.x)
+                || float.IsNaN(change.y) || float.IsInfinity(change.y)
+                || float.IsNaN(change.z) || float.IsInfinity(change.z)
+                ? Vector3.zero : Vector3.ClampMagnitude(change, 100f);
             Vector2 move = Vector2.ClampMagnitude(new Vector2(input.MoveX, input.MoveY), 1f);
             input.MoveX = move.x;
             input.MoveY = move.y;
@@ -500,6 +523,7 @@ namespace UnscriptedEngine
                 velocity.y = Mathf.Max(velocity.y + gravity * input.DeltaTime, -terminalVelocity);
             }
 
+            velocity += input.ExternalVelocityChange;
             collectingCollisionLoss = reduceSpeedOnCollision;
             CollisionFlags collisionFlags;
             try
@@ -554,6 +578,7 @@ namespace UnscriptedEngine
                 ? Vector3.MoveTowards(velocity, desiredVelocity, flightAcceleration * input.DeltaTime)
                 : Vector3.MoveTowards(velocity, Vector3.zero, brakingDecelerationFlying * input.DeltaTime);
 
+            velocity += input.ExternalVelocityChange;
             CollisionFlags collisionFlags = characterController.Move(velocity * input.DeltaTime);
             isGrounded = (collisionFlags & CollisionFlags.Below) != 0;
         }
@@ -748,6 +773,7 @@ namespace UnscriptedEngine
             hasDeferredProxyTargetState = false;
             proxySyncSuppressedUntil = 0f;
             velocity = Vector3.zero;
+            pendingExternalVelocityChange = Vector3.zero;
             isGrounded = characterController != null && characterController.isGrounded;
             pendingVerticalMoveInput = 0f;
             ResetFixedPositionSamples(transform.position);
@@ -903,3 +929,5 @@ namespace UnscriptedEngine
         }
     }
 }
+
+
