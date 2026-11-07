@@ -32,7 +32,7 @@ namespace UnscriptedEngine.Editor
         }
         public int callbackOrder => 0;
         public void OnPreprocessBuild(BuildReport report) => Rebuild();
-        [MenuItem("Unscripted Engine/Items/Rebuild Network Catalog")]
+        [MenuItem("Tools/UnscriptedEngine/Items/Rebuild Network Catalog")]
         public static void Rebuild()
         {
             var items = AssetDatabase.FindAssets("t:ItemDataSO").OrderBy(id => id)
