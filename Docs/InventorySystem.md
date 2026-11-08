@@ -37,6 +37,7 @@ public sealed class InventoryExample : MonoBehaviour
 
 - `Items` exposes a read-only dictionary keyed by slot index. Missing keys are empty slots. Each `InventorySlot` contains `Item` and `Quantity`; operations replace snapshots instead of mutating them.
 - `TryAddItem` adds the complete requested amount or changes nothing. It fills existing stacks first, then uses the first available slots.
+- `TryAddItems(IReadOnlyList<InventorySlot>)` adds an entire batch atomically. Failure preserves every slot; success publishes one inventory change plus per-addition item events. Chest generation uses this to avoid partial rewards.
 - `CanAddItem` checks the same capacity rules without changing slots or firing events.
 - `TryRemoveItem(slotIndex, quantity = 1)` removes the requested amount and frees the slot when empty.
 - `TrySplitStack(sourceSlotIndex, quantity)` moves part of a stack to an empty slot. It cannot move the whole stack, exceed stack capacity, or split a singular item.
@@ -104,3 +105,7 @@ public sealed class InventoryDropExample : MonoBehaviour
 ## Changelog
 
 - 2026-10-25: Documented current inventory API, pickup/drop flow, and authority limits.
+
+## Containers and loot
+
+See [Containers, transfers and loot](InventoryContainers.md) for side-by-side UI, atomic transfers, physics bursts, extension points and limitations.

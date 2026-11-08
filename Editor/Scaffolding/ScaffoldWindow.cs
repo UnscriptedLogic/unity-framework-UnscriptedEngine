@@ -54,7 +54,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
                     else EditorUtility.DisplayDialog("Invalid folder", "Choose an existing folder inside this project's Assets folder.", "OK");
                 }
             }
-            var plan = new ScaffoldPlan { name = scaffoldName, folder = AssetDatabase.GetAssetPath(folder), scene = GeneratesScene };
+            ScaffoldPlan plan = new ScaffoldPlan { name = scaffoldName, folder = AssetDatabase.GetAssetPath(folder), scene = GeneratesScene };
             DrawOptions(plan);
             EditorGUILayout.HelpBox(string.Join("\n", plan.OutputPaths()), MessageType.None);
             if (ScaffoldGeneration.HasPending)
@@ -102,6 +102,9 @@ namespace UnscriptedEngine.Editor.Scaffolding
 
     public sealed class PlayerScaffoldWindow : ScaffoldWindow
     {
+        [SerializeField]
+        [Tooltip("Optional subfolder name inside the output folder. Leave blank to use Name.")]
+        private string subfolderOverride = "";
         [SerializeField] private bool wireActiveScene;
         [SerializeField] private int templateIndex;
         private Type[] templates;
@@ -121,6 +124,9 @@ namespace UnscriptedEngine.Editor.Scaffolding
 
         protected override void DrawOptions(ScaffoldPlan plan)
         {
+            subfolderOverride = EditorGUILayout.TextField(new GUIContent("Subfolder override",
+                "Leave blank to create a subfolder matching Name. Enter a custom folder name to override it."), subfolderOverride);
+            plan.subfolder = string.IsNullOrWhiteSpace(subfolderOverride) ? plan.name : subfolderOverride;
             if (templates.Length == 0) return;
             templateIndex = Mathf.Clamp(templateIndex, 0, templates.Length - 1);
             templateIndex = EditorGUILayout.Popup("Template", templateIndex, templates.Select(type =>

@@ -8,11 +8,16 @@ namespace Framework.Components
     public sealed class ProceduralSpider : MonoBehaviour
     {
         [Tooltip("Legs directed by this brain. Populate with Collect Child Legs after adding custom legs.")]
-        [SerializeField] private ProceduralSpiderLeg[] legs = Array.Empty<ProceduralSpiderLeg>();
-        [Tooltip("Maximum simultaneous steps. One gives a stable crawl; larger values allow faster gaits."), Min(1)]
-        [SerializeField] private int maximumSteppingLegs = 2;
-        [Tooltip("Seconds between footing checks. Animation and IK still run every frame; probes are throttled to limit physics cost."), Min(0f)]
-        [SerializeField] private float stepCheckInterval = 0.05f;
+        [SerializeField]
+        private ProceduralSpiderLeg[] legs = Array.Empty<ProceduralSpiderLeg>();
+        [Tooltip("Maximum simultaneous steps. One gives a stable crawl; larger values allow faster gaits.")]
+        [Min(1)]
+        [SerializeField]
+        private int maximumSteppingLegs = 2;
+        [Tooltip("Seconds between footing checks. Animation and IK still run every frame; probes are throttled to limit physics cost.")]
+        [Min(0f)]
+        [SerializeField]
+        private float stepCheckInterval = 0.05f;
         private int nextLeg;
         private float checkTimer;
 

@@ -169,17 +169,60 @@ namespace UnscriptedEngine
             return PlanAddItem(itemDataSo, quantity, out _, false);
         }
 
+        /// <summary>Add a complete batch or change nothing. Publishes one inventory change.</summary>
+        public OperationResult TryAddItems(IReadOnlyList<InventorySlot> items)
+        {
+            if (!CanMutate || publishingChanges) return Failure("Inventory cannot accept a batch now");
+            if (slots == null || items == null) return Failure("Inventory or batch is not initialized");
+            Dictionary<int, InventorySlot> staged = new Dictionary<int, InventorySlot>(slots);
+            List<EB_InventoryAddedItem> notifications = new List<EB_InventoryAddedItem>();
+            int total = 0;
+            int firstSlot = -1;
+            foreach (InventorySlot item in items)
+            {
+                if (item == null) return Failure("Batch contains a null entry");
+                if (IsSpawned && item.Item != null && ItemNetworkCatalog.Resolve(item.Item.NetworkId) != item.Item)
+                    return Failure("Item is missing from the network catalog");
+                OperationResult result = PlanAddItem(item.Item, item.Quantity,
+                    out List<KeyValuePair<int, int>> additions, true, staged);
+                if (!result.Success) return result;
+                if (total > int.MaxValue - item.Quantity) return Failure("Batch quantity exceeds supported total");
+                total += item.Quantity;
+                if (firstSlot < 0) firstSlot = result.SlotIndex;
+                foreach (KeyValuePair<int, int> addition in additions)
+                {
+                    int existing = staged.TryGetValue(addition.Key, out InventorySlot current) ? current.Quantity : 0;
+                    staged[addition.Key] = new InventorySlot(item.Item, existing + addition.Value);
+                    notifications.Add(new EB_InventoryAddedItem
+                    {
+                        Inventory = this, ItemAdded = item.Item, SlotIndex = addition.Key, Quantity = addition.Value
+                    });
+                }
+            }
+            if (items.Count == 0) return Success(-1, 0, "Empty batch accepted");
+            slots.Clear();
+            foreach (KeyValuePair<int, InventorySlot> pair in staged) slots.Add(pair.Key, pair.Value);
+            PublishChanged(() =>
+            {
+                foreach (EB_InventoryAddedItem notification in notifications) EventBus.PublishNotification(notification);
+            });
+            return Success(firstSlot, total, "Batch added successfully");
+        }
+
         private OperationResult PlanAddItem(ItemDataSO item, int quantity,
-            out List<KeyValuePair<int, int>> additions, bool recordAdditions = true)
+            out List<KeyValuePair<int, int>> additions, bool recordAdditions = true,
+            IReadOnlyDictionary<int, InventorySlot> contents = null)
         {
             additions = null;
-            if (slots == null) return Failure("Inventory is not initialized");
+            contents = contents ?? slots;
+            if (contents == null) return Failure("Inventory is not initialized");
             if (item == null) return Failure("Item data is null");
             if (quantity <= 0) return Failure("Quantity must be greater than zero");
 
             bool forceSingular = IsForceSingular(item);
-            if (forceSingular && HasItem(item, out int existingIndex))
-                return Failure("Item already exists in inventory", existingIndex);
+            if (forceSingular)
+                foreach (KeyValuePair<int, InventorySlot> pair in contents)
+                    if (pair.Value.Item == item) return Failure("Item already exists in inventory", pair.Key);
 
             int capacity = GetStackCapacity(item);
             if (forceSingular && quantity > capacity)
@@ -191,7 +234,7 @@ namespace UnscriptedEngine
             // Fill existing stacks before allocating new slots.
             for (int i = 0; i < inventorySize && remaining > 0; i++)
             {
-                if (!slots.TryGetValue(i, out var slot) || slot.Item != item) continue;
+                if (!contents.TryGetValue(i, out InventorySlot slot) || slot.Item != item) continue;
                 int amount = Math.Min(remaining, Math.Max(0, capacity - slot.Quantity));
                 if (amount == 0) continue;
                 if (firstIndex < 0) firstIndex = i;
@@ -201,7 +244,7 @@ namespace UnscriptedEngine
 
             for (int i = 0; i < inventorySize && remaining > 0; i++)
             {
-                if (slots.ContainsKey(i)) continue;
+                if (contents.ContainsKey(i)) continue;
                 int amount = Math.Min(remaining, capacity);
                 if (firstIndex < 0) firstIndex = i;
                 additions?.Add(new KeyValuePair<int, int>(i, amount));
@@ -305,6 +348,59 @@ namespace UnscriptedEngine
             slots.Add(targetSlotIndex, new InventorySlot(source.Item, quantity));
             PublishChanged();
             return Success(targetSlotIndex, quantity, "Stack split successfully");
+        }
+
+        /// <summary>Atomic move, merge or whole-stack swap. Server/offline only.</summary>
+        public OperationResult TryTransferItem(int sourceSlotIndex, UInventoryComponent destination,
+            int targetSlotIndex, int quantity = 1)
+        {
+            if (destination == null) return Failure("Destination is missing");
+            if (!CanMutate || !destination.CanMutate) return Failure("Transfers require server authority");
+            if (publishingChanges || destination.publishingChanges) return Failure("Inventory is publishing changes");
+            OperationResult validation = ValidateOccupiedSlot(sourceSlotIndex, quantity);
+            if (!validation.Success) return validation;
+            if (destination.slots == null) return Failure("Destination is not initialized");
+            if (targetSlotIndex < 0 || targetSlotIndex >= destination.inventorySize) return Failure("Invalid target slot");
+            if (destination == this && sourceSlotIndex == targetSlotIndex) return Failure("Source and target are identical");
+            InventorySlot source = slots[sourceSlotIndex];
+            destination.slots.TryGetValue(targetSlotIndex, out InventorySlot target);
+            bool swap = target != null && target.Item != source.Item;
+            if (swap && quantity != source.Quantity) return Failure("Only whole stacks can be swapped");
+            int resultingQuantity = quantity + (target != null && !swap ? target.Quantity : 0);
+            if (resultingQuantity > GetStackCapacity(source.Item)) return Failure("Target stack capacity exceeded");
+            if (IsForceSingular(source.Item) && destination.ContainsOtherSlot(source.Item, targetSlotIndex,
+                destination == this && quantity == source.Quantity ? sourceSlotIndex : -1))
+                return Failure("Item is restricted to one slot");
+            if (swap && IsForceSingular(target.Item) && ContainsOtherSlot(target.Item, sourceSlotIndex,
+                destination == this ? targetSlotIndex : -1)) return Failure("Swap violates singular item rule");
+
+            destination.slots[targetSlotIndex] = new InventorySlot(source.Item, resultingQuantity);
+            if (swap) slots[sourceSlotIndex] = target;
+            else if (quantity == source.Quantity) slots.Remove(sourceSlotIndex);
+            else slots[sourceSlotIndex] = new InventorySlot(source.Item, source.Quantity - quantity);
+            // Commit both before notifying; callbacks cannot mutate either inventory.
+            publishingChanges = destination.publishingChanges = true;
+            try
+            {
+                ReplicateInventory();
+                if (destination != this) destination.ReplicateInventory();
+                EventBus.Notify(Changed);
+                EventBus.PublishNotification(new EB_InventoryChanged { Inventory = this });
+                if (destination != this)
+                {
+                    EventBus.Notify(destination.Changed);
+                    EventBus.PublishNotification(new EB_InventoryChanged { Inventory = destination });
+                }
+            }
+            finally { publishingChanges = destination.publishingChanges = false; }
+            return Success(targetSlotIndex, quantity, swap ? "Stacks swapped" : "Items transferred");
+        }
+
+        private bool ContainsOtherSlot(ItemDataSO item, int excludedSlot, int secondExcludedSlot)
+        {
+            foreach (KeyValuePair<int, InventorySlot> pair in slots)
+                if (pair.Key != excludedSlot && pair.Key != secondExcludedSlot && pair.Value.Item == item) return true;
+            return false;
         }
 
         private OperationResult ValidateOccupiedSlot(int slotIndex, int quantity)

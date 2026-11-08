@@ -1,6 +1,6 @@
 {
   "name": "UnscriptedEngine.UI.Editor",
-  "references": ["UnscriptedEngine", "UnscriptedEngine.Editor", "UnscriptedEngine.UI", "UnityEngine.UI"],
+  "references": ["UnscriptedEngine", "UnscriptedEngine.Editor", "UnscriptedEngine.UI", "UnityEngine.UI", "Unity.TextMeshPro", "Unity.Netcode.Runtime"],
   "includePlatforms": ["Editor"],
   "defineConstraints": ["UNSCRIPTED_UGUI"],
   "versionDefines": [{"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"}],

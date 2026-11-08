@@ -119,7 +119,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
             {
                 if (!(plan.ui != UIScaffoldKind.None ? GetUIBuilder().Build(plan) : ScaffoldAssets.Build(plan))) return;
                 SessionState.EraseString(PendingKey);
-                Debug.Log($"UnscriptedEngine generated {plan.name} in {plan.folder}.");
+                Debug.Log($"UnscriptedEngine generated {plan.name} in {plan.OutputFolder}.");
             }
             catch (Exception exception)
             {

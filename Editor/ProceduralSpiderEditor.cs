@@ -19,11 +19,11 @@ namespace Framework.Editor
 
         private void OnGUI()
         {
-            EditorGUILayout.HelpBox("Creates a new spider root with independent legs. Local Y points away from the surface. Move and rotate the root in Play Mode to see stepping. Use unit scale. Body movement is supplied by your own controller.", MessageType.Info);
+            EditorGUILayout.HelpBox("Creates a new spider root with independent legs. Local Y points away from the surface. Resize the root using positive uniform Transform Scale, including during Play Mode. Dimensions are authored at scale 1; step timing stays unchanged. Body movement is supplied by your own controller.", MessageType.Info);
             legCount = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent("Leg Count", "Any count from 1 to 64, distributed around the body."), legCount), 1, 64);
             attachmentRadius = Mathf.Max(0f, EditorGUILayout.FloatField(new GUIContent("Attachment Radius", "Distance of each leg root from the body center."), attachmentRadius));
             sectionCount = Mathf.Clamp(EditorGUILayout.IntField(new GUIContent("Sections Per Leg", "Initial number of blocks. Edit individual legs afterward."), sectionCount), 1, 16);
-            sectionLength = Mathf.Max(0.01f, EditorGUILayout.FloatField(new GUIContent("Section Length", "Initial length of every block, in world units."), sectionLength));
+            sectionLength = Mathf.Max(0.01f, EditorGUILayout.FloatField(new GUIContent("Section Length", "Initial length of every block at unit root scale."), sectionLength));
             firstBend = EditorGUILayout.Slider(new GUIContent("First Bend", "Degrees above the outward body plane."), firstBend, -175f, 175f);
             subsequentBend = EditorGUILayout.Slider(new GUIContent("Following Bends", "Signed rest angle added at each following joint."), subsequentBend, -175f, 175f);
             sharedMaterial = (Material)EditorGUILayout.ObjectField(new GUIContent("Material", "Shared material assigned to all blocks."), sharedMaterial, typeof(Material), false);
@@ -70,6 +70,7 @@ namespace Framework.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
+            EditorGUILayout.HelpBox("Resize the whole spider with positive uniform root Transform Scale (for example 0.1, 1 or 10 on all axes). Lengths, thickness, probes and step distances scale together. Nonuniform or negative hierarchy scale is unsupported.", MessageType.Info);
             if (GUILayout.Button("Collect Child Legs"))
             {
                 Undo.RecordObject(target, "Collect Spider Legs");

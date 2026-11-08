@@ -20,7 +20,7 @@ namespace UnscriptedEngine.Settings
         {
             CollectServerDefinitions();
             BindService();
-            if (!IsServer) RequestSnapshotServerRpc();
+            if (!IsServer) RequestSnapshotRpc();
         }
 
         private void CollectServerDefinitions()
@@ -63,8 +63,8 @@ namespace UnscriptedEngine.Settings
             ReceiveValueClientRpc(definition.Id, definition.SerializeValue(value));
         }
 
-        [ServerRpc(RequireOwnership = false)]
-        private void RequestSnapshotServerRpc(ServerRpcParams rpc = default)
+        [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+        private void RequestSnapshotRpc(RpcParams rpc = default)
         {
             ClientRpcParams target = new ClientRpcParams
             {

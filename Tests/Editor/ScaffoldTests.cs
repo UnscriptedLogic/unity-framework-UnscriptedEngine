@@ -114,6 +114,37 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void PlayerSubfolderIsCreatedAndSurvivesCompilationHandoff()
+        {
+            ScaffoldPlan plan = Plan("Arena");
+            plan.subfolder = plan.name;
+            CollectionAssert.Contains(plan.OutputPaths(), folder + "/Arena/Scripts/C_Arena.cs");
+            CollectionAssert.Contains(plan.OutputPaths(), folder + "/Arena/Prefabs/P_Arena.prefab");
+            CollectionAssert.Contains(plan.OutputPaths(), folder + "/Arena/PD_Arena.asset");
+            plan.subfolder = "Custom Player";
+            ScaffoldPlan restored = JsonUtility.FromJson<ScaffoldPlan>(JsonUtility.ToJson(plan));
+            Assert.AreEqual(folder + "/Custom Player/Prefabs/P_Arena.prefab", restored.PathFor("P", "prefab"));
+            Assert.DoesNotThrow(() => restored.Validate());
+            restored.EnsureOutputFolders();
+            Assert.True(AssetDatabase.IsValidFolder(folder + "/Custom Player/Scripts"));
+            Assert.True(AssetDatabase.IsValidFolder(folder + "/Custom Player/Prefabs"));
+        }
+
+        [TestCase("../Other")]
+        [TestCase("Nested/Folder")]
+        [TestCase("Nested\\Folder")]
+        [TestCase("Editor")]
+        [TestCase("Resources")]
+        [TestCase("CON")]
+        [TestCase("Trailing.")]
+        public void InvalidSubfoldersAreRejected(string subfolder)
+        {
+            ScaffoldPlan plan = Plan();
+            plan.subfolder = subfolder;
+            Assert.Throws<ArgumentException>(() => plan.Validate());
+        }
+
+        [Test]
         public void SceneNamesAndPlayerNamesUsePrefixDivider()
         {
             var plan = Plan("Arena");

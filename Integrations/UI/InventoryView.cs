@@ -11,9 +11,11 @@ public class InventoryView : UCanvasComponent
 
     private IInventory _inventory;
     private InventorySlotView[] _slots;
+    private InventoryTransferPanel transferPanel;
 
-    public void Initialize(IInventory inventory)
+    public void Initialize(IInventory inventory, InventoryTransferPanel panel = null)
     {
+        transferPanel = panel;
         if (_inventory != null) _inventory.Changed -= RefreshSlots;
         _inventory = inventory;
         if (_inventory == null) { RefreshSlots(); return; }
@@ -56,6 +58,9 @@ public class InventoryView : UCanvasComponent
                 : Instantiate(slotPrefab, gridContainer);
             slot.SetActive(true);
             _slots[i] = slot.GetComponent<InventorySlotView>();
+            InventorySlotDragHandler drag = slot.GetComponent<InventorySlotDragHandler>();
+            if (drag == null && transferPanel != null) drag = slot.AddComponent<InventorySlotDragHandler>();
+            if (drag != null) drag.Bind(transferPanel, _inventory as UInventoryComponent, i);
             if (_slots[i] == null)
                 Debug.LogError("Inventory slot prefab requires InventorySlotView.", slot);
         }

@@ -14,6 +14,8 @@ namespace UnscriptedEngine.Editor.Scaffolding
     {
         public string name;
         public string folder;
+        public string subfolder;
+        public string OutputFolder => string.IsNullOrEmpty(subfolder) ? folder : folder + "/" + subfolder;
         public bool scene;
         public UIScaffoldKind ui;
         public string templateType;
@@ -47,11 +49,11 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 string uiFolder = extension == "cs"
                     ? "/Scripts/UI" + (ui == UIScaffoldKind.Widget ? "/Widgets" : "")
                     : "/Prefabs/UI" + (ui == UIScaffoldKind.Widget ? "/Components" : "");
-                return $"{folder}{uiFolder}/{prefix}_{name}.{extension}";
+                return $"{OutputFolder}{uiFolder}/{prefix}_{name}.{extension}";
             }
-            string outputFolder = extension == "cs" ? folder + "/Scripts"
-                : extension == "unity" ? folder + "/Scenes"
-                : extension == "prefab" ? folder + "/Prefabs" : folder;
+            string outputFolder = extension == "cs" ? OutputFolder + "/Scripts"
+                : extension == "unity" ? OutputFolder + "/Scenes"
+                : extension == "prefab" ? OutputFolder + "/Prefabs" : OutputFolder;
             return $"{outputFolder}/{prefix}_{name}.{extension}";
         }
 
@@ -111,6 +113,14 @@ namespace UnscriptedEngine.Editor.Scaffolding
             if (folder.Split('/').Any(part => part.Equals("Editor", StringComparison.OrdinalIgnoreCase)
                 || part.Equals("Resources", StringComparison.OrdinalIgnoreCase)))
                 throw new ArgumentException("Choose a runtime folder outside Editor and Resources.");
+            if (!string.IsNullOrEmpty(subfolder)
+                && (subfolder.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+                    || subfolder.Contains('/') || subfolder.Contains('\\')
+                    || subfolder != subfolder.Trim() || subfolder.EndsWith(".", StringComparison.Ordinal)
+                    || subfolder.Equals("Editor", StringComparison.OrdinalIgnoreCase)
+                    || subfolder.Equals("Resources", StringComparison.OrdinalIgnoreCase)
+                    || Regex.IsMatch(subfolder, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)", RegexOptions.IgnoreCase)))
+                throw new ArgumentException("Subfolder must be a single valid folder name outside Editor and Resources.");
             foreach (string path in OutputPaths())
                 if (Directory.Exists(path))
                     throw new IOException("A folder occupies an output file path: " + path);
