@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add composable gameplay saves with explicit versioned modules, prepared restoration, named slots, dirty tracking, checksummed two-generation recovery, native files, and transaction-confirmed Web IndexedDB storage.
+- Add Save Counter sample and Docs/SaveSystem.md covering setup, diagrams, migration, storage extensions, browser behavior, and limitations. Existing settings persistence remains independent.
 - Add LogService with source type/context, severity methods, category filtering, a global switch, per-call player-build opt-in, and play-session reset.
 - Add immutable typed settings declared in code, nested catalogs, reference-counted scene providers, validated runtime values, subscriptions, and local JSON preferences.
 - Replace per-setting ScriptableObjects with scene-local catalog activation; preserve saved preference IDs and generate linker preservation for annotated catalogs.

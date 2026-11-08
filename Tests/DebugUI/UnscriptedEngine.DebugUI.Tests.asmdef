@@ -1,0 +1,13 @@
+{
+  "name": "UnscriptedEngine.DebugUI.Tests",
+  "references": ["UnscriptedEngine", "UnscriptedEngine.DebugUI", "UnityEngine.UI", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS", "UNSCRIPTED_UGUI", "UNSCRIPTED_INPUT_SYSTEM"],
+  "versionDefines": [
+    {"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"},
+    {"name":"com.unity.inputsystem","expression":"1.0.0","define":"UNSCRIPTED_INPUT_SYSTEM"}
+  ]
+}

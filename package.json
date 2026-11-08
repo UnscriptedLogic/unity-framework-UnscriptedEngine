@@ -29,6 +29,11 @@
     },
     "samples": [
         {
+            "path": "Samples~/Saving",
+            "description": "Save and load a counter with modular gameplay persistence and browser storage.",
+            "displayName": "Save Counter"
+        },
+        {
             "path": "Samples~/Controls",
             "description": "Connect a reusable lever or valve to a gauge without project scripts.",
             "displayName": "Control Binding"

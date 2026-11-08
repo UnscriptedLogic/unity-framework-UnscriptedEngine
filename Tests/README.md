@@ -10,6 +10,8 @@ If package tests are not discovered, add `com.unscriptedlogic.unscriptedengine` 
 
 Coverage: EventBus ordering, placement, cancellation, mutation during dispatch, duplicate subscriptions, destroyed listeners and validation; inventory atomicity, stacking, removal, splitting, singular items and notifications; tag normalization, stable IDs, hierarchy, containers, queries and lookup; repeated Play sessions and game-instance initialization, duplicates, persistence and shutdown.
 
+`SaveServiceTests` additionally covers two-generation recovery after interrupted writes, checksum detection, module migration and future-version protection, unknown-module preservation, slot separation/defaults, preparation before application, dirty changes during asynchronous I/O, busy-operation exclusion, invalid names, deletion, and file persistence. See [SaveSystem.md](../Docs/SaveSystem.md) for browser-specific validation and limitations.
+
 Validation so far: all test sources compile against the local Unity references. Unity Test Runner execution is still required; compilation is not a passing test run. The suite now includes local-host lifecycle integration; separate host/client processes, possession, tick timing and camera arbitration still need coverage.
 
 ## Architecture gap resolution

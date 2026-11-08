@@ -1,0 +1,5 @@
+{
+    "name": "UnscriptedEngine.Samples.Saving",
+    "references": ["UnscriptedEngine"],
+    "autoReferenced": true
+}

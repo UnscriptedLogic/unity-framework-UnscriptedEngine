@@ -1,6 +1,6 @@
 # ItemEquipComponent
 
-`ItemEquipComponent` observes an `IInventory`, selects a hotbar slot, creates held-item visuals, and runs one `ItemBehaviour` session for the selected item. It lives in `Framework/Components/ItemEquipComponent.cs`; input mapping and behaviour-action authority belong to the caller. Selected-item dropping has a built-in owner-to-server request.
+`ItemEquipComponent` observes an `IInventory`, selects a hotbar slot, creates held-item visuals, and runs one `ItemBehaviour` session for the selected item. It lives in `Framework/Components/Equipment/ItemEquipComponent.cs`; input mapping and behaviour-action authority belong to the caller. Selected-item dropping has a built-in owner-to-server request.
 
 ## 🧭 Purpose and workflow
 

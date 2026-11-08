@@ -11,8 +11,8 @@ namespace UnscriptedEngine
     {
         public enum NavigationStatus { Idle, Moving, Arrived, Failed }
 
-        [SerializeField, Min(0.01f)] private float sampleDistance = 1f;
-        [SerializeField, Min(0.01f)] private float maxAgentDrift = 1f;
+        [SerializeField, Min(0.01f), Tooltip("Maximum distance used to project the motor and destination onto the NavMesh.")] private float sampleDistance = 1f;
+        [SerializeField, Min(0.01f), Tooltip("Maximum allowed distance between the navigation agent and character simulation position.")] private float maxAgentDrift = 1f;
         private NavMeshAgent agent;
         private CharacterMovementComponent movement;
         private bool stopping;
@@ -55,7 +55,7 @@ namespace UnscriptedEngine
             if (!CanNavigate || !isActiveAndEnabled || movement.IsFlying)
                 return Fail();
 
-            var filter = new NavMeshQueryFilter { agentTypeID = agent.agentTypeID, areaMask = agent.areaMask };
+            NavMeshQueryFilter filter = new NavMeshQueryFilter { agentTypeID = agent.agentTypeID, areaMask = agent.areaMask };
             // Never teleport the motor to make an invalid spawn navigable.
             if (!NavMesh.SamplePosition(movement.SimulationPosition, out NavMeshHit start, sampleDistance, filter)
                 || !NavMesh.SamplePosition(candidate, out NavMeshHit target, sampleDistance, filter))

@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>UnscriptedEngine IndexedDB bridge tests</title>
+<body>RUNNING
+<script>
+// Serve the package folder over HTTP. Run ?phase=1, restart the browser, then run ?phase=2.
+// UTF8ToString is an identity function here; Unity marshaling is outside this bridge-only test.
+var LibraryManager = { library: {} };
+function mergeInto(target, value) { Object.assign(target, value); }
+function UTF8ToString(value) { return value; }
+(async function () {
+    try {
+        var source = await (await fetch("../../Framework/Saving/Plugins/WebGL/UnscriptedSave.jslib")).text();
+        Function("LibraryManager", "mergeInto", "UTF8ToString", "SendMessage", source)(
+            LibraryManager, mergeInto, UTF8ToString, SendMessage);
+    } catch (error) { document.body.textContent = "FAIL loading bridge: " + error; return; }
+
+var pending=new Map(), serial=0, passed=0;
+function SendMessage(receiver,method,message){var [id,status,...rest]=message.split('|'); var task=pending.get(Number(id)); pending.delete(Number(id)); task({status,value:rest.join('|')});}
+function call(operation,slot,generation,payload=''){return new Promise(resolve=>{var id=++serial;pending.set(id,resolve);LibraryManager.library.UnscriptedSave_Request('test','unscripted-save-validation',id,operation,slot,generation,payload);});}
+function check(condition,message){if(!condition)throw Error(message);passed++;}
+(async()=>{try{
+var phase=new URLSearchParams(location.search).get('phase');
+if(phase==='2'){
+check((await call('read','persist',0)).value===btoa('persistent-value'),'persistence across browser restart');
+check((await call('delete','persist',0)).status==='ok','delete persisted slot');
+check((await call('read','persist',0)).value==='missing','generation zero removed');
+check((await call('read','persist',1)).value==='missing','generation one removed');
+}else{
+await call('delete','persist',0);
+check((await call('read','persist',0)).value==='missing','missing read');
+check((await call('write','persist',0,btoa('persistent-value'))).status==='ok','write generation zero');
+check((await call('write','persist',1,btoa('backup-value'))).status==='ok','write generation one');
+check((await call('read','persist',0)).value===btoa('persistent-value'),'read current');
+check((await call('read','persist',1)).value===btoa('backup-value'),'independent generation');
+check((await call('read','other',0)).value==='missing','slot isolation');
+var originalPut=IDBObjectStore.prototype.put;
+IDBObjectStore.prototype.put=function(){this.transaction.abort();};
+check((await call('write','persist',0,btoa('damage'))).status==='error','aborted transaction reports failure');
+IDBObjectStore.prototype.put=originalPut;
+check((await call('read','persist',0)).value===btoa('persistent-value'),'abort preserves previous data');
+var descriptor=Object.getOwnPropertyDescriptor(window,'indexedDB');
+Object.defineProperty(window,'indexedDB',{configurable:true,get(){throw new DOMException('Storage denied','SecurityError')}});
+check((await call('read','persist',0)).status==='error','storage denial reports failure');
+if(descriptor)Object.defineProperty(window,'indexedDB',descriptor);else delete window.indexedDB;
+check((await call('read','persist',0)).value===btoa('persistent-value'),'connection reusable after failure');
+}
+document.body.textContent='PASS phase '+phase+': '+passed+' browser assertions';
+}catch(error){document.body.textContent='FAIL '+error.stack;}})();
+})();
+</script>
