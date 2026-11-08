@@ -117,10 +117,13 @@ namespace UnscriptedEngine.Editor.Scaffolding
             foreach (string prefix in Prefixes)
             {
                 string className = prefix + "_" + name;
+                string fullTypeName = ui == UIScaffoldKind.None
+                    ? "UnscriptedEngine.Prototypes." + name + "." + className
+                    : className;
                 string expectedPath = PathFor(prefix, "cs");
                 var existingScript = AssetDatabase.LoadAssetAtPath<MonoScript>(expectedPath);
-                if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetType(className) != null
-                        && (existingScript == null || assembly.GetType(className) != existingScript.GetClass()))
+                if (AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetType(fullTypeName) != null
+                        && (existingScript == null || assembly.GetType(fullTypeName) != existingScript.GetClass()))
                     || AssetDatabase.FindAssets(className + " t:MonoScript").Any(guid =>
                         System.IO.Path.GetFileNameWithoutExtension(AssetDatabase.GUIDToAssetPath(guid)) == className
                         && !string.Equals(AssetDatabase.GUIDToAssetPath(guid), expectedPath, StringComparison.OrdinalIgnoreCase)))
