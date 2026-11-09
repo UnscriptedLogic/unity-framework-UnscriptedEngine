@@ -209,6 +209,64 @@ namespace UnscriptedEngine
             return Success(firstSlot, total, "Batch added successfully");
         }
 
+        /// <summary>Consume required items and grant rewards as one atomic inventory change.
+        /// Costs are removed from lowest slot indices first, before planning reward capacity.</summary>
+        public OperationResult TryExchangeItems(IReadOnlyList<InventorySlot> costs, IReadOnlyList<InventorySlot> rewards)
+        {
+            if (!CanMutate || publishingChanges) return Failure("Inventory cannot exchange items now");
+            if (slots == null || costs == null || rewards == null) return Failure("Inventory or exchange is not initialized");
+            Dictionary<int, InventorySlot> staged = new Dictionary<int, InventorySlot>(slots);
+            foreach (InventorySlot cost in costs)
+            {
+                if (cost == null || cost.Item == null || cost.Quantity <= 0) return Failure("Invalid exchange cost");
+                if (IsSpawned && ItemNetworkCatalog.Resolve(cost.Item.NetworkId) != cost.Item)
+                    return Failure("Cost item is missing from the network catalog");
+                int remaining = cost.Quantity;
+                for (int index = 0; index < inventorySize && remaining > 0; index++)
+                {
+                    if (!staged.TryGetValue(index, out InventorySlot slot) || slot.Item != cost.Item) continue;
+                    int consumed = Math.Min(remaining, slot.Quantity);
+                    if (consumed == slot.Quantity) staged.Remove(index);
+                    else staged[index] = new InventorySlot(slot.Item, slot.Quantity - consumed);
+                    remaining -= consumed;
+                }
+                if (remaining > 0) return Failure($"Not enough {cost.Item.name}");
+            }
+
+            List<EB_InventoryAddedItem> notifications = new List<EB_InventoryAddedItem>();
+            int totalRewards = 0;
+            int firstSlot = -1;
+            foreach (InventorySlot reward in rewards)
+            {
+                if (reward == null || reward.Item == null || reward.Quantity <= 0) return Failure("Invalid exchange reward");
+                if (IsSpawned && ItemNetworkCatalog.Resolve(reward.Item.NetworkId) != reward.Item)
+                    return Failure("Reward item is missing from the network catalog");
+                if (totalRewards > int.MaxValue - reward.Quantity) return Failure("Reward quantity exceeds supported total");
+                OperationResult result = PlanAddItem(reward.Item, reward.Quantity,
+                    out List<KeyValuePair<int, int>> additions, true, staged);
+                if (!result.Success) return result;
+                totalRewards += reward.Quantity;
+                if (firstSlot < 0) firstSlot = result.SlotIndex;
+                foreach (KeyValuePair<int, int> addition in additions)
+                {
+                    int existing = staged.TryGetValue(addition.Key, out InventorySlot slot) ? slot.Quantity : 0;
+                    staged[addition.Key] = new InventorySlot(reward.Item, existing + addition.Value);
+                    notifications.Add(new EB_InventoryAddedItem
+                    {
+                        Inventory = this, ItemAdded = reward.Item, SlotIndex = addition.Key, Quantity = addition.Value
+                    });
+                }
+            }
+            if (costs.Count == 0 && rewards.Count == 0) return Success(-1, 0, "Empty exchange accepted");
+            slots.Clear();
+            foreach (KeyValuePair<int, InventorySlot> pair in staged) slots.Add(pair.Key, pair.Value);
+            PublishChanged(() =>
+            {
+                foreach (EB_InventoryAddedItem notification in notifications) EventBus.PublishNotification(notification);
+            });
+            return Success(firstSlot, totalRewards, "Items exchanged successfully");
+        }
+
         private OperationResult PlanAddItem(ItemDataSO item, int quantity,
             out List<KeyValuePair<int, int>> additions, bool recordAdditions = true,
             IReadOnlyDictionary<int, InventorySlot> contents = null)

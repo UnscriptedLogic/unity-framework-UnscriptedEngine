@@ -66,6 +66,14 @@ namespace Framework.Components
         [Range(1, 32)]
         [SerializeField]
         private int solverIterations = 12;
+        [Header("Obstacle Avoidance")]
+        [Tooltip("Check block clearance and swivel the leg around its planted foot to avoid nearby walls. Uses Surface Layers; exclude the body layer.")]
+        [SerializeField]
+        private bool avoidObstacles = true;
+        [Tooltip("Extra clearance around block sides at unit scale. Contact at the very tip of the final block is allowed.")]
+        [Min(0f)]
+        [SerializeField]
+        private float wallClearance = 0.025f;
         [Header("Debug")]
         [Tooltip("Show labeled rest shape, block size, reach, footing probes and step dimensions when selected.")]
         [SerializeField]
@@ -86,6 +94,11 @@ namespace Framework.Components
         private Transform plantedSurface;
         private Vector3 surfaceLocalPoint;
         private bool initialized;
+        private Vector3[] avoidancePose;
+        private readonly Collider[] obstacleBuffer = new Collider[16];
+        private Vector3 contactLocalNormal;
+        private float avoidanceAngle;
+        private bool obstructed;
 
         // Positive uniform scale is supported, including inherited scale from parent objects.
         private float WorldScale => Mathf.Max(0.0001f, Mathf.Abs(transform.lossyScale.y));
@@ -94,9 +107,42 @@ namespace Framework.Components
         public Vector3 FootPosition => foot;
         public int SectionCount => sections == null ? 0 : sections.Length;
         public float Reach => totalLength;
+        public bool IsObstructed => obstructed;
+        private bool strikeActive;
+        private Vector3 strikeStart;
+        private Vector3 strikeTarget;
+        private Vector3 strikeUp;
+        private float strikeLift;
+        private float strikeWindup;
+        private float strikeSlam;
+        private float strikeRecovery;
+        private float strikeTime;
 
-        private void OnEnable() { initialized = false; IsStepping = false; }
-        private void OnDisable() { initialized = false; IsStepping = false; plantedSurface = null; }
+        /// <summary>Overrides walking with a lifted windup, fast stab and return to footing.</summary>
+        public void BeginStrike(Vector3 target, Vector3 up, float lift, float windup, float slam, float recovery)
+        {
+            if (!initialized)
+            {
+                if (blocks.Length != SectionCount) RebuildGeometry();
+                else Initialize();
+            }
+            strikeStart = foot;
+            strikeTarget = target;
+            strikeUp = up.normalized;
+            strikeLift = Mathf.Max(0f, lift);
+            strikeWindup = Mathf.Max(0.01f, windup);
+            strikeSlam = Mathf.Max(0.01f, slam);
+            strikeRecovery = Mathf.Max(0.01f, recovery);
+            strikeTime = 0f;
+            strikeActive = true;
+            IsStepping = false;
+            plantedSurface = null;
+        }
+
+        public void CancelStrike() { strikeActive = false; initialized = false; IsStepping = false; }
+
+        private void OnEnable() { initialized = false; IsStepping = false; strikeActive = false; }
+        private void OnDisable() { initialized = false; IsStepping = false; strikeActive = false; plantedSurface = null; }
 
         public void Configure(SpiderLegSection[] shape, Material sharedMaterial)
         {
@@ -140,6 +186,9 @@ namespace Framework.Components
             int count = SectionCount;
             joints = new Vector3[count + 1];
             lengths = new float[count];
+            avoidancePose = new Vector3[count + 1];
+            avoidanceAngle = 0f;
+            obstructed = false;
             RefreshLengths();
             BuildRestPose();
             foot = joints[count];
@@ -196,7 +245,18 @@ namespace Framework.Components
             float height = probeHeight * scale;
             float distance = (probeHeight + probeDepth) * scale;
             if (Physics.Raycast(rest + transform.up * height, -transform.up, out hit,
-                distance, surfaceLayers, QueryTriggerInteraction.Ignore)) return true;
+                distance, surfaceLayers, QueryTriggerInteraction.Ignore))
+            {
+                // A floor hit behind a wall is not a usable foot placement. Prefer the blocking wall.
+                Vector3 towardFoot = hit.point - transform.position;
+                float footDistance = towardFoot.magnitude;
+                if (avoidObstacles && footDistance > 0f &&
+                    Physics.Raycast(transform.position, towardFoot / footDistance, out RaycastHit wallHit,
+                        footDistance, surfaceLayers, QueryTriggerInteraction.Ignore) &&
+                    wallHit.distance < footDistance - (thickness + wallClearance) * scale)
+                    hit = wallHit;
+                return true;
+            }
             // At corners also look outward, then inward toward the body-facing wall.
             if (Physics.Raycast(transform.position, transform.forward, out hit, totalLength,
                 surfaceLayers, QueryTriggerInteraction.Ignore)) return true;
@@ -209,19 +269,23 @@ namespace Framework.Components
             foot = hit.point;
             plantedSurface = hit.transform;
             surfaceLocalPoint = plantedSurface.InverseTransformPoint(foot);
+            contactLocalNormal = plantedSurface.InverseTransformDirection(hit.normal);
         }
 
         public bool TryBeginStep()
         {
-            if (!initialized || IsStepping || lengths.Length == 0 || !TryFindFooting(out RaycastHit hit)) return false;
+            if (!initialized || strikeActive || IsStepping || lengths.Length == 0 || !TryFindFooting(out RaycastHit hit)) return false;
             float distance = stepDistance * WorldScale;
-            if (plantedSurface != null && (hit.point - foot).sqrMagnitude < distance * distance &&
+            float movementSquared = (hit.point - foot).sqrMagnitude;
+            bool needsClearanceStep = obstructed && movementSquared > 0.000001f * WorldScale * WorldScale;
+            if (!needsClearanceStep && plantedSurface != null && movementSquared < distance * distance &&
                 (transform.position - foot).sqrMagnitude < totalLength * totalLength * 0.95f) return false;
             stepStart = foot;
             stepEnd = hit.point;
             stepNormal = hit.normal;
             plantedSurface = hit.transform;
             surfaceLocalPoint = plantedSurface.InverseTransformPoint(stepEnd);
+            contactLocalNormal = plantedSurface.InverseTransformDirection(hit.normal);
             stepProgress = 0f;
             IsStepping = true;
             return true;
@@ -238,6 +302,27 @@ namespace Framework.Components
             }
             // Resizing preserves existing world-space contacts and never rebuilds block objects.
             RefreshLengths();
+            if (strikeActive)
+            {
+                strikeTime += Mathf.Max(0f, deltaTime);
+                Vector3 lifted = strikeStart + strikeUp * strikeLift;
+                if (strikeTime < strikeWindup)
+                    foot = Vector3.Lerp(strikeStart, lifted, Mathf.SmoothStep(0f, 1f, strikeTime / strikeWindup));
+                else if (strikeTime < strikeWindup + strikeSlam)
+                    foot = Vector3.Lerp(lifted, strikeTarget, Mathf.Pow((strikeTime - strikeWindup) / strikeSlam, 2f));
+                else
+                {
+                    float recovery = Mathf.Clamp01((strikeTime - strikeWindup - strikeSlam) / strikeRecovery);
+                    foot = Vector3.Lerp(strikeTarget, RestFoot(), Mathf.SmoothStep(0f, 1f, recovery));
+                    if (recovery >= 1f)
+                    {
+                        strikeActive = false;
+                        if (TryFindFooting(out RaycastHit footing)) Plant(footing);
+                    }
+                }
+                Solve();
+                return;
+            }
             if (IsStepping)
             {
                 stepProgress = Mathf.Clamp01(stepProgress + Mathf.Max(0f, deltaTime) / Mathf.Max(0.01f, stepDuration));
@@ -277,6 +362,7 @@ namespace Framework.Components
                     if ((joints[count] - foot).sqrMagnitude < toleranceSquared) break;
                 }
             }
+            AvoidObstacles(worldScale);
             float worldThickness = thickness * worldScale;
             for (int index = 0; index < count && index < blocks.Length; index++)
             {
@@ -288,6 +374,89 @@ namespace Framework.Components
                 block.localScale = new Vector3(worldThickness / Mathf.Max(0.0001f, Mathf.Abs(scale.x)),
                     lengths[index] / Mathf.Max(0.0001f, Mathf.Abs(scale.y)), worldThickness / Mathf.Max(0.0001f, Mathf.Abs(scale.z)));
             }
+        }
+
+        private void AvoidObstacles(float scale)
+        {
+            obstructed = false;
+            if (!avoidObstacles || lengths.Length == 0) return;
+            if (HasBlockedSection(scale) == false)
+            {
+                avoidanceAngle = 0f;
+                return;
+            }
+
+            // Rotating the whole solved chain about its root-tip axis preserves every section length
+            // and both endpoint positions. No iterative physics queries inside the FABRIK solver.
+            Array.Copy(joints, avoidancePose, joints.Length);
+            Vector3 axis = joints[joints.Length - 1] - joints[0];
+            if (axis.sqrMagnitude > 0.00000001f * scale * scale && lengths.Length > 1)
+            {
+                axis.Normalize();
+                if (avoidanceAngle != 0f && TryAvoidanceAngle(axis, avoidanceAngle, scale)) return;
+                // Bounded search, smallest change first. Normal clear legs only pay one overlap per block.
+                for (int index = 1; index <= 6; index++)
+                {
+                    float angle = index * 30f;
+                    if (TryAvoidanceAngle(axis, angle, scale)) return;
+                    if (index < 6 && TryAvoidanceAngle(axis, -angle, scale)) return;
+                }
+            }
+            Array.Copy(avoidancePose, joints, joints.Length);
+            avoidanceAngle = 0f;
+            // No valid posture: let the brain schedule a new footing. Never shorten rigid blocks.
+            obstructed = true;
+        }
+
+        private bool TryAvoidanceAngle(Vector3 axis, float angle, float scale)
+        {
+            Quaternion rotation = Quaternion.AngleAxis(angle, axis);
+            for (int index = 1; index < joints.Length - 1; index++)
+                joints[index] = avoidancePose[0] + rotation * (avoidancePose[index] - avoidancePose[0]);
+            if (HasBlockedSection(scale)) return false;
+            avoidanceAngle = angle;
+            return true;
+        }
+
+        private bool HasBlockedSection(float scale)
+        {
+            float halfWidth = (thickness * 0.5f + wallClearance) * scale;
+            Vector3 normal = plantedSurface == null ? Vector3.zero : plantedSurface.TransformDirection(contactLocalNormal).normalized;
+            for (int index = 0; index < lengths.Length; index++)
+            {
+                Vector3 start = joints[index];
+                Vector3 end = joints[index + 1];
+                Vector3 delta = end - start;
+                float length = delta.magnitude;
+                if (length <= 0.00001f * scale) continue;
+                Vector3 direction = delta / length;
+
+                // The tip is intentionally planted on a collider. Trim only the contact wedge from
+                // the last query, based on approach angle, so ordinary toe contact is not an obstacle.
+                if (index == lengths.Length - 1 && !IsStepping && plantedSurface != null)
+                {
+                    float approach = Vector3.Dot(-direction, normal);
+                    if (approach > 0.01f)
+                    {
+                        float trim = Mathf.Min(length * 0.25f, halfWidth * 1.5f / approach);
+                        end -= direction * trim;
+                        length -= trim;
+                    }
+                }
+                if (length <= 0.00001f * scale) continue;
+                Quaternion rotation = Quaternion.FromToRotation(Vector3.up, direction);
+                int count = Physics.OverlapBoxNonAlloc((start + end) * 0.5f,
+                    new Vector3(halfWidth, length * 0.5f, halfWidth), obstacleBuffer,
+                    rotation, surfaceLayers, QueryTriggerInteraction.Ignore);
+                // A saturated buffer is conservatively treated as blocked.
+                if (count == obstacleBuffer.Length) return true;
+                for (int obstacle = 0; obstacle < count; obstacle++)
+                {
+                    Collider candidate = obstacleBuffer[obstacle];
+                    if (candidate != null && !candidate.transform.IsChildOf(transform)) return true;
+                }
+            }
+            return false;
         }
 
         private static Vector3 SafeDirection(Vector3 direction, Vector3 fallback)
@@ -336,6 +505,21 @@ namespace Framework.Components
             {
                 Gizmos.DrawWireSphere(foot, 0.06f * scale);
                 Label(foot, "Current foot");
+                if (avoidObstacles)
+                {
+                    Gizmos.color = obstructed ? Color.red : Color.green;
+                    for (int index = 0; index < lengths.Length; index++)
+                    {
+                        Vector3 delta = joints[index + 1] - joints[index];
+                        Matrix4x4 previousMatrix = Gizmos.matrix;
+                        Gizmos.matrix = Matrix4x4.TRS((joints[index] + joints[index + 1]) * 0.5f,
+                            Quaternion.FromToRotation(Vector3.up, delta), Vector3.one);
+                        float width = (thickness + wallClearance * 2f) * scale;
+                        Gizmos.DrawWireCube(Vector3.zero, new Vector3(width, delta.magnitude, width));
+                        Gizmos.matrix = previousMatrix;
+                    }
+                    Label(joints[0], obstructed ? "No clear leg posture" : "Block clearance (includes Wall Clearance)");
+                }
             }
         }
 

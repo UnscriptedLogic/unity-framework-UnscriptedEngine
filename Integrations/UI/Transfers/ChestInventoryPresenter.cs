@@ -8,10 +8,10 @@ namespace UnscriptedEngine.UI
     public sealed class ChestInventoryPresenter : MonoBehaviour
     {
         [SerializeField]
-        [Tooltip("Panel to open for the local interactor. May be shared between chests.")]
+        [Tooltip("Panel template shown as a managed modal copy through the local player's UCanvasController.")]
         private InventoryTransferPanel panel;
         private UChest chest;
-        private bool openedPanel;
+        private InventoryTransferPanel openedPanel;
 
         private void OnEnable()
         {
@@ -23,8 +23,8 @@ namespace UnscriptedEngine.UI
         private void OnDisable()
         {
             if (chest != null) chest.InventoryOpenRequested -= OpenInventory;
-            if (openedPanel && panel != null && chest != null && panel.Displays(chest.Inventory)) panel.Close();
-            openedPanel = false;
+            if (openedPanel != null) openedPanel.Close();
+            openedPanel = null;
         }
 
         private void OpenInventory(GameObject interactor, UInventoryComponent container)
@@ -38,8 +38,29 @@ namespace UnscriptedEngine.UI
             }
             UInventoryComponent player = interactor.GetComponentInChildren<UInventoryComponent>();
             if (player == null || player == container) return;
-            panel.Open(player, container);
-            openedPanel = true;
+            UPawn pawn = interactor.GetComponentInParent<UPawn>();
+            UController owner = pawn != null ? pawn.Controller : interactor.GetComponentInParent<UController>();
+            UCanvasController ui = null;
+            if (owner != null)
+                foreach (UCanvasController candidate in FindObjectsByType<UCanvasController>(FindObjectsInactive.Exclude))
+                    if (candidate.OwningController == owner && candidate.isActiveAndEnabled)
+                    {
+                        ui = candidate;
+                        break;
+                    }
+            if (ui == null)
+            {
+                Debug.LogWarning("Chest inventory requires the interactor's initialized UCanvasController.", this);
+                return;
+            }
+            if (openedPanel != null && openedPanel.Controller == ui)
+            {
+                openedPanel.Open(player, container);
+                ui.BringToFront(openedPanel);
+                return;
+            }
+            if (openedPanel != null) openedPanel.Close();
+            openedPanel = ui.Show(panel, screen => screen.Open(player, container));
         }
     }
 }

@@ -89,7 +89,7 @@ namespace UnscriptedEngine
 
         private void ApplyControllerReference(NetworkObjectReference reference)
         {
-            if (reference.TryGet(out NetworkObject controllerObject) && controllerObject.TryGetComponent(out UController controller))
+            if (reference.TryGet(out NetworkObject controllerObject, NetworkManager) && controllerObject.TryGetComponent(out UController controller))
             {
                 SetControllerFromPossession(controller);
                 return;

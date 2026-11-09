@@ -64,7 +64,7 @@ if (!result.Success) Debug.LogWarning(result.Message);
 
 Use the framework interactor normally. Direct `chest.TryOpen(playerObject)` is also available after your own access validation.
 
-- **Split:** generated child Canvas starts hidden. Presenter finds interactor's child inventory and opens player/chest grids. Close button hides it. Scene needs EventSystem with matching input module and TMP font resources. Your game must release cursor and suspend look/movement while browsing; creator does not change global input state.
+- **Split:** generated child Canvas is a hidden template. Presenter finds interactor's inventory and owning `UCanvasController`, then opens a managed modal copy. Same routing as settings: modal input consumption, `InputFocus` gameplay blocking, and visible/unlocked cursor. Close button or the controller's Back action releases that screen's focus lease. Scene needs EventSystem with matching input module and TMP font resources. Initialize player UI before interaction; no unmanaged fallback opens if the owning UI controller is missing.
 - **Burst:** drop fragments need valid world pickup prefabs. Add Rigidbody/Collider for physical loot. Origin is above the placeholder cube. Each successful interaction releases up to the configured pickup cap; remaining contents stay stored. Empty or failed release does not report a successful open.
 
 ## Extend

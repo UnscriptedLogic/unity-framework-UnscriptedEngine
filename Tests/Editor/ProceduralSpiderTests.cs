@@ -121,7 +121,10 @@ namespace UnscriptedEngine.Tests
             root.transform.position += Vector3.forward * 0.5f;
             Assert.That(leg.TryBeginStep(), Is.True);
             leg.enabled = false;
+            // EditMode does not dispatch lifecycle callbacks for this runtime-only MonoBehaviour.
+            typeof(ProceduralSpiderLeg).GetMethod("OnDisable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(leg, null);
             leg.enabled = true;
+            typeof(ProceduralSpiderLeg).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(leg, null);
             Assert.That(leg.IsStepping, Is.False);
             leg.Tick(0f);
             Assert.That(float.IsNaN(leg.FootPosition.x), Is.False);
@@ -139,6 +142,111 @@ namespace UnscriptedEngine.Tests
             brain.CollectChildLegs();
             Assert.That(brain.Legs.Count, Is.EqualTo(1));
             Assert.That(brain.Legs[0], Is.SameAs(leg));
+        }
+
+        [TestCase(false, 0.1f)]
+        [TestCase(false, 1f)]
+        [TestCase(false, 10f)]
+        [TestCase(true, 1f)]
+        public void NearbyObstacleSwivelsKneeWithoutMovingFootOrChangingSectionLengths(bool wallOrientation, float scale)
+        {
+            ProceduralSpiderLeg leg = CreateLeg();
+            root.transform.localScale = Vector3.one * scale;
+            if (wallOrientation) root.transform.rotation = Quaternion.Euler(0f, 0f, -90f);
+            UnityEditor.SerializedObject legObject = new UnityEditor.SerializedObject(leg);
+            legObject.FindProperty("surfaceLayers").intValue = 1 << 30;
+            legObject.ApplyModifiedPropertiesWithoutUndo();
+            leg.RebuildGeometry();
+            Vector3 initialFoot = leg.FootPosition;
+            Transform first = leg.transform.GetChild(0);
+            Vector3 knee = first.position + first.up * first.lossyScale.y * 0.5f;
+            surface = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            surface.layer = 30;
+            surface.transform.position = knee;
+            surface.transform.rotation = root.transform.rotation;
+            surface.transform.localScale = new Vector3(0.15f, 0.3f, 0.3f) * scale;
+            Collider wall = surface.GetComponent<Collider>();
+            Physics.SyncTransforms();
+            Assert.That(BlockOverlaps(first, wall), Is.True);
+            leg.Tick(0f);
+            Assert.That(leg.IsObstructed, Is.False);
+            Assert.That(Vector3.Distance(leg.FootPosition, initialFoot), Is.LessThan(0.0001f * scale));
+            Assert.That(first.lossyScale.y, Is.EqualTo(0.8f * scale).Within(0.0001f * scale));
+            Assert.That(leg.transform.GetChild(1).lossyScale.y, Is.EqualTo(1.1f * scale).Within(0.0001f * scale));
+            for (int index = 0; index < leg.SectionCount; index++)
+                Assert.That(BlockOverlaps(leg.transform.GetChild(index), wall), Is.False);
+
+            legObject.Update();
+            legObject.FindProperty("avoidObstacles").boolValue = false;
+            legObject.ApplyModifiedPropertiesWithoutUndo();
+            leg.Tick(0f);
+            Assert.That(BlockOverlaps(first, wall), Is.True);
+        }
+
+        [Test]
+        public void FootingChoosesBlockingWallInsteadOfFloorBehindIt()
+        {
+            ProceduralSpiderLeg leg = CreateLeg();
+            surface = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            surface.transform.position = Vector3.down * 1.05f;
+            surface.transform.localScale = new Vector3(10f, 0.1f, 10f);
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.transform.SetParent(root.transform, false);
+            wall.transform.position = new Vector3(0f, 0f, 0.45f);
+            wall.transform.localScale = new Vector3(10f, 3f, 0.1f);
+            Physics.SyncTransforms();
+            leg.RebuildGeometry();
+            Assert.That(leg.FootPosition.z, Is.EqualTo(0.4f).Within(0.001f));
+            Assert.That(leg.FootPosition.y, Is.GreaterThan(-0.99f));
+        }
+
+        private static bool BlockOverlaps(Transform block, Collider obstacle)
+        {
+            Collider[] hits = Physics.OverlapBox(block.position, block.lossyScale * 0.5f,
+                block.rotation, 1 << obstacle.gameObject.layer, QueryTriggerInteraction.Ignore);
+            foreach (Collider hit in hits)
+            {
+                if (hit == obstacle) return true;
+            }
+            return false;
+        }
+
+        [Test]
+        public void StrikeLiftsSlamsAndReturnsWithoutWalkingOverridingIt()
+        {
+            ProceduralSpiderLeg leg = CreateLeg();
+            leg.RebuildGeometry();
+            Vector3 start = leg.FootPosition;
+            Vector3 target = start + Vector3.forward * 0.1f;
+            leg.BeginStrike(target, Vector3.up, 0.3f, 0.5f, 0.2f, 0.4f);
+            Assert.That(leg.TryBeginStep(), Is.False);
+            leg.Tick(0.5f);
+            Assert.That(Vector3.Distance(leg.FootPosition, start + Vector3.up * 0.3f), Is.LessThan(0.001f));
+            leg.Tick(0.2f);
+            Assert.That(Vector3.Distance(leg.FootPosition, target), Is.LessThan(0.001f));
+            leg.Tick(0.4f);
+            Assert.That(Vector3.Distance(leg.FootPosition, start), Is.LessThan(0.001f));
+            Assert.That(leg.IsStepping, Is.False);
+        }
+
+        [Test]
+        public void CancelStrikeAndReenableRestoreFooting()
+        {
+            ProceduralSpiderLeg leg = CreateLeg();
+            leg.RebuildGeometry();
+            Vector3 rest = leg.FootPosition;
+            leg.BeginStrike(rest + Vector3.forward, Vector3.up, 1f, 1f, 1f, 1f);
+            leg.Tick(0.5f);
+            leg.CancelStrike();
+            leg.Tick(0f);
+            Assert.That(Vector3.Distance(leg.FootPosition, rest), Is.LessThan(0.001f));
+            leg.BeginStrike(rest + Vector3.forward, Vector3.up, 1f, 1f, 1f, 1f);
+            leg.enabled = false;
+            typeof(ProceduralSpiderLeg).GetMethod("OnDisable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(leg, null);
+            leg.enabled = true;
+            typeof(ProceduralSpiderLeg).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Invoke(leg, null);
+            leg.Tick(0.5f);
+            Assert.That(Vector3.Distance(leg.FootPosition, rest), Is.LessThan(0.001f));
         }
 
         private ProceduralSpiderLeg CreateLeg()

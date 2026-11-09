@@ -4,8 +4,10 @@ using UnityEngine;
 namespace UnscriptedEngine.UI
 {
     /// <summary>Coordinates two inventory views and their transfer requests.</summary>
-    public sealed class InventoryTransferPanel : MonoBehaviour
+    public sealed class InventoryTransferPanel : UCanvasComponent
     {
+        public override CanvasInputPolicy InputPolicy => CanvasInputPolicy.Modal;
+        public override CanvasLayer Layer => CanvasLayer.Modal;
         [SerializeField]
         [Tooltip("View displaying the player's inventory.")]
         private InventoryView playerView;
@@ -32,14 +34,16 @@ namespace UnscriptedEngine.UI
             playerView.Initialize(player, this);
             containerView.Initialize(container, this);
         }
-        public void Close()
+        public new void Close()
         {
             if (playerView != null) playerView.Initialize(null);
             if (containerView != null) containerView.Initialize(null);
             player = null;
             container = null;
-            gameObject.SetActive(false);
+            if (Controller != null) base.Close();
+            else gameObject.SetActive(false);
         }
+        public override bool HandleBack() { Close(); return true; }
         public void Transfer(UInventoryComponent source, int sourceSlot, UInventoryComponent destination, int targetSlot, int quantity)
         {
             if (!isActiveAndEnabled || player == null || container == null

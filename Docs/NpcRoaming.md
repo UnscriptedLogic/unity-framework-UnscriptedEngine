@@ -153,6 +153,10 @@ public sealed class PatrolTargetProvider : NpcTargetProvider
 
 Providers may represent patrol routes, resource locations, cover points, or local territory. Keep sensing and game rules out of the motor. A provider only returns a destination; it should not start movement or retain another NPC's action state.
 
+Providers can override `MovementFinished(NpcActionStatus status)` to commit route progress only after successful execution. Override `ContinueAfterArrival` to return true while following a continuous route; the controller then requests another destination without the usual idle interval. Defaults preserve ordinary roaming behavior. This skips deliberate idle time but retains the motor's braking and arrival checks.
+
+The Lucky Number prototype uses this contract for roadside walking. GameMode injects one scene-owned route source into its NPCs, and a prototype-specific provider selects connected sidewalk/crossing nodes or delegates to the original roaming provider. Generic framework types never discover or depend on city-generation data. Full wiring and regeneration instructions are in `Assets/Prototypes/UnityGameJam2026/README.md`.
+
 ## Extending execution and adding GOAP later
 
 `INpcAction` is a small execution contract. Configure an instance before `Start`, call `Tick` until terminal, and call `Cancel` when interrupted. Cancellation must release every resource the action owns. Do not tick an action after cancellation unless it has been restarted. Action instances are owned by one executor and reused, not shared across NPCs.

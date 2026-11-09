@@ -5,9 +5,15 @@ using UnscriptedEngine;
 
 public class InventoryView : UCanvasComponent
 {
-    [SerializeField] private GameObject slotPrefab;
-    [SerializeField] private Transform gridContainer;
-    [SerializeField] private TMPro.TMP_Text slotCountText;
+    [SerializeField]
+    [Tooltip("Slot visual used to build this inventory grid.")]
+    private GameObject slotPrefab;
+    [SerializeField]
+    [Tooltip("Parent containing the inventory cells.")]
+    private Transform gridContainer;
+    [SerializeField]
+    [Tooltip("Optional occupied-slot counter.")]
+    private TMPro.TMP_Text slotCountText;
 
     private IInventory _inventory;
     private InventorySlotView[] _slots;
@@ -39,10 +45,10 @@ public class InventoryView : UCanvasComponent
     private void BuildGrid()
     {
         if (gridContainer == null || slotPrefab == null) { Debug.LogError("Inventory view requires a container and slot prefab.", this); return; }
-        var existingSlots = new List<InventorySlotView>();
+        List<InventorySlotView> existingSlots = new List<InventorySlotView>();
         foreach (Transform child in gridContainer)
         {
-            if (child.TryGetComponent<InventorySlotView>(out var existingSlot))
+            if (child.TryGetComponent<InventorySlotView>(out InventorySlotView existingSlot))
             {
                 existingSlot.gameObject.SetActive(false);
                 existingSlots.Add(existingSlot);
@@ -59,7 +65,7 @@ public class InventoryView : UCanvasComponent
             slot.SetActive(true);
             _slots[i] = slot.GetComponent<InventorySlotView>();
             InventorySlotDragHandler drag = slot.GetComponent<InventorySlotDragHandler>();
-            if (drag == null && transferPanel != null) drag = slot.AddComponent<InventorySlotDragHandler>();
+            if (drag == null && _inventory is UInventoryComponent) drag = slot.AddComponent<InventorySlotDragHandler>();
             if (drag != null) drag.Bind(transferPanel, _inventory as UInventoryComponent, i);
             if (_slots[i] == null)
                 Debug.LogError("Inventory slot prefab requires InventorySlotView.", slot);
@@ -71,13 +77,23 @@ public class InventoryView : UCanvasComponent
     private void RefreshSlots()
     {
         if (_slots == null) return;
-        if (_inventory == null) { foreach (var slot in _slots) if (slot != null) slot.SetSlot(null); if (slotCountText != null) slotCountText.text = string.Empty; return; }
+        if (_inventory == null)
+        {
+            foreach (InventorySlotView slot in _slots)
+            {
+                if (slot == null) continue;
+                slot.SetSlot(null);
+                if (slot.TryGetComponent(out InventorySlotDragHandler drag)) drag.Bind(null, null, -1);
+            }
+            if (slotCountText != null) slotCountText.text = string.Empty;
+            return;
+        }
         if (_slots.Length != _inventory.InventorySize) { BuildGrid(); return; }
 
         if (slotCountText != null)
             slotCountText.text = $"{_inventory.Items?.Count ?? 0} / {_inventory.InventorySize} slots";
 
-        var items = _inventory.Items;
+        IReadOnlyDictionary<int, InventorySlot> items = _inventory.Items;
         for (int i = 0; i < _slots.Length; i++)
         {
             InventorySlot value = null;

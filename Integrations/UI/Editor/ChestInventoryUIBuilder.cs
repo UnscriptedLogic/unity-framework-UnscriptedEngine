@@ -24,7 +24,7 @@ namespace UnscriptedEngine.UI.Editor
             RectTransform frame = Rect("Inventory Window", backdrop);
             frame.anchorMin = frame.anchorMax = new Vector2(0.5f, 0.5f);
             frame.sizeDelta = new Vector2(1040f, 580f);
-            frame.gameObject.AddComponent<Image>().color = new Color(0.08f, 0.1f, 0.14f, 1f);
+            frame.gameObject.AddComponent<Image>().color = Color.black;
 
             GameObject slotTemplate = CreateSlotTemplate(canvasObject.transform);
             InventoryView player = CreateView("Player", frame, slotTemplate, new Vector2(0.02f, 0.12f), new Vector2(0.49f, 0.98f));
@@ -32,7 +32,8 @@ namespace UnscriptedEngine.UI.Editor
             ChestCreation.SetObject(panel, "playerView", player);
             ChestCreation.SetObject(panel, "containerView", container);
             RectTransform close = Rect("Close", frame, new Vector2(0.42f, 0.02f), new Vector2(0.58f, 0.1f));
-            close.gameObject.AddComponent<Image>().color = new Color(0.25f, 0.3f, 0.4f, 1f);
+            close.gameObject.AddComponent<Image>().color = Color.black;
+            AddBorder(close.gameObject);
             Button button = close.gameObject.AddComponent<Button>();
             button.targetGraphic = close.GetComponent<Image>();
             Label("Close", close, Vector2.zero, Vector2.one);
@@ -49,7 +50,7 @@ namespace UnscriptedEngine.UI.Editor
             Label(title, root, new Vector2(0f, 0.91f), Vector2.one);
             TMP_Text count = Label("", root, Vector2.zero, new Vector2(1f, 0.07f));
             RectTransform viewport = Rect("Viewport", root, new Vector2(0f, 0.08f), new Vector2(1f, 0.9f));
-            viewport.gameObject.AddComponent<Image>().color = new Color(0.03f, 0.04f, 0.07f, 1f);
+            viewport.gameObject.AddComponent<Image>().color = Color.black;
             viewport.gameObject.AddComponent<RectMask2D>();
             ScrollRect scroll = viewport.gameObject.AddComponent<ScrollRect>();
             scroll.viewport = viewport;
@@ -58,7 +59,7 @@ namespace UnscriptedEngine.UI.Editor
             RectTransform content = Rect("Slots", viewport, new Vector2(0f, 1f), Vector2.one);
             content.pivot = new Vector2(0.5f, 1f);
             GridLayoutGroup grid = content.gameObject.AddComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(90f, 72f);
+            grid.cellSize = new Vector2(90f, 90f);
             grid.spacing = new Vector2(5f, 5f);
             grid.padding = new RectOffset(4, 4, 4, 4);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
@@ -75,7 +76,11 @@ namespace UnscriptedEngine.UI.Editor
         private static GameObject CreateSlotTemplate(Transform parent)
         {
             RectTransform root = Rect("Slot Template", parent);
-            root.gameObject.AddComponent<Image>().color = new Color(0.18f, 0.23f, 0.3f, 1f);
+            Image background = root.gameObject.AddComponent<Image>();
+            background.color = Color.black;
+            background.sprite = null;
+            background.type = Image.Type.Simple;
+            AddBorder(root.gameObject);
             InventorySlotView slot = root.gameObject.AddComponent<InventorySlotView>();
             TMP_Text name = Label("", root, new Vector2(0.04f, 0.35f), new Vector2(0.96f, 0.96f));
             TMP_Text quantity = Label("", root, new Vector2(0.5f, 0.03f), new Vector2(0.96f, 0.35f));
@@ -98,6 +103,13 @@ namespace UnscriptedEngine.UI.Editor
             label.color = Color.white;
             label.raycastTarget = false;
             return label;
+        }
+
+        private static void AddBorder(GameObject target)
+        {
+            Outline border = target.AddComponent<Outline>();
+            border.effectColor = new Color(1f, 1f, 1f, 0.3f);
+            border.effectDistance = new Vector2(1f, -1f);
         }
 
         private static RectTransform Rect(string name, Transform parent)

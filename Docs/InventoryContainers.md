@@ -31,7 +31,11 @@ panel.Open(playerInventory, chestInventory);
 panel.Close();
 ```
 
-Drag moves the whole stack. Empty target moves; matching target merges if the full amount fits; different item swaps whole stacks. Same-inventory rearrangement also works. Contents changed during dragging cancel the drag when detected. Slots remain visible while dragging; no floating icon is supplied.
+For gameplay input blocking, show `InventoryTransferPanel` as a managed modal screen: `uiController.Show(panelTemplate, screen => screen.Open(playerInventory, chestInventory));`. Chest presenter does this automatically using the interactor's existing `UCanvasController`. Calling `Open` directly on an unmanaged panel binds its views but does not register it with EventBus routing or acquire modal focus.
+
+Drag moves the whole stack with a cursor-following slot preview. Empty target moves; matching target merges if the full amount fits; different item swaps whole stacks. Standalone `InventoryView` also supports rearrangement when bound to `UInventoryComponent`, without a transfer panel. Contents changed during dragging cancel the drop when detected. Preview never blocks target raycasts.
+
+Generated chest UI and the project's default inventory prefabs use square, sharp-cornered cells on a black background. Older generated chest prefabs retain their saved layout; regenerate their panel or adjust its grid cell size and Images to match.
 
 ## Transfers without UI
 

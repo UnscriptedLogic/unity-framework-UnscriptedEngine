@@ -2,6 +2,7 @@ using System;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.UI;
 using UnscriptedEngine.UI;
 using UnscriptedEngine.UI.Editor;
 using Object = UnityEngine.Object;
@@ -66,11 +67,15 @@ namespace UnscriptedEngine.Tests
                 InventoryTransferPanel panel = instance.GetComponentInChildren<InventoryTransferPanel>(true);
                 Assert.That(panel, Is.Not.Null);
                 Assert.That(panel.gameObject.activeSelf, Is.False);
-                // Edit Mode does not invoke ordinary runtime OnEnable methods: subscribe explicitly.
-                ChestInventoryPresenter presenter = instance.GetComponent<ChestInventoryPresenter>();
-                typeof(ChestInventoryPresenter).GetMethod("OnEnable", System.Reflection.BindingFlags.Instance
-                    | System.Reflection.BindingFlags.NonPublic).Invoke(presenter, null);
-                Assert.That(instance.GetComponent<UChest>().TryOpen(player), Is.True);
+                foreach (GridLayoutGroup layout in panel.GetComponentsInChildren<GridLayoutGroup>(true))
+                    Assert.That(layout.cellSize.x, Is.EqualTo(layout.cellSize.y));
+                Image background = panel.transform.Find("Backdrop/Inventory Window").GetComponent<Image>();
+                Assert.That(background.color, Is.EqualTo(Color.black));
+                Image slotBackground = panel.transform.Find("Slot Template").GetComponent<Image>();
+                Assert.That(slotBackground.sprite, Is.Null);
+                Assert.That(slotBackground.color, Is.EqualTo(Color.black));
+                // Exercise grid binding directly. Presenter uses the player's modal UI controller at runtime.
+                panel.Open(inventory, instance.GetComponent<UChest>().Inventory);
                 Assert.That(panel.Displays(instance.GetComponent<UChest>().Inventory), Is.True);
                 Assert.That(panel.GetComponentsInChildren<InventoryView>().Length, Is.EqualTo(2));
                 Assert.That(panel.GetComponentsInChildren<InventorySlotDragHandler>().Length, Is.EqualTo(22));

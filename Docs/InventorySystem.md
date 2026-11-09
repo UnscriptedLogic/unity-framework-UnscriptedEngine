@@ -109,3 +109,19 @@ public sealed class InventoryDropExample : MonoBehaviour
 ## Containers and loot
 
 See [Containers, transfers and loot](InventoryContainers.md) for side-by-side UI, atomic transfers, physics bursts, extension points and limitations.
+
+## Atomic item exchanges
+
+Use `TryExchangeItems(costs, rewards)` for inventory-backed prices, crafting, or item conversion. Both arguments are read-only lists of `InventorySlot` values; slot indices are not inputs. The API removes matching costs from the lowest occupied slot indices first, across multiple stacks, then plans rewards against the staged remaining inventory.
+
+```csharp
+InventorySlot[] costs = { new InventorySlot(coinItem, 10), new InventorySlot(scrapItem, 2) };
+InventorySlot[] rewards = { new InventorySlot(potionItem, 1) };
+UInventoryComponent.OperationResult result = inventory.TryExchangeItems(costs, rewards);
+```
+
+All cost quantities must exist before any rewards are granted. Spent stacks can free reward slots. A failed cost or reward leaves live contents unchanged and emits no change notification. A success commits once, publishes one `Changed` / `EB_InventoryChanged`, and publishes reward-added notifications against final contents. Reward-added amounts are gross rewards, not net deltas when the same item also appears in costs. Mutations from notification callbacks are rejected.
+
+Server/offline authority, item catalog validation, stack capacity, and singular-item rules still apply. Empty cost lists permit grants; empty reward lists permit consumption; both empty succeed without a notification. Duplicate cost entries are cumulative. The result quantity is the total granted reward quantity, capped at `int.MaxValue`.
+
+This is a single-inventory storage transaction, not a permissions system or multi-inventory trade. The caller must validate player access, merchant/recipe availability, and network request ownership. Do not implement finite stock or merchant treasuries by chaining independent remove/add operations.

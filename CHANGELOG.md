@@ -1,5 +1,7 @@
 # Unreleased
 
+- Add an overhead speech-bubble creator for existing pawns and a standalone SpeechBubbleInteraction component, with local-only interaction completion events, timed greetings, and independent shop/quest composition.
+- Add reusable dialogue assets and independent sessions with branching choices, screen/world presenters, pooled choice buttons, text reveal, timed chatter, controller-specific input focus, and local NPC interaction integration. See Docs/Dialogue.md and the Dialogue prototype demo.
 - Add composable gameplay saves with explicit versioned modules, prepared restoration, named slots, dirty tracking, checksummed two-generation recovery, native files, and transaction-confirmed Web IndexedDB storage.
 - Add Save Counter sample and Docs/SaveSystem.md covering setup, diagrams, migration, storage extensions, browser behavior, and limitations. Existing settings persistence remains independent.
 - Add LogService with source type/context, severity methods, category filtering, a global switch, per-call player-build opt-in, and play-session reset.

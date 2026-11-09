@@ -84,7 +84,7 @@ namespace UnscriptedEngine.UI.Editor
             settings.ApplyModifiedProperties();
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(openMode == ChestOpenMode.SplitInventory
-                ? "Creates a two-column UI with drag/drop and Close button. Uses your scene's EventSystem. Player needs an inventory; cursor/input management stays with your game."
+                ? "Creates a modal two-column UI with drag/drop and Close button. Uses the player's UCanvasController for input blocking and cursor focus. Player needs an inventory and initialized UI controller."
                 : "Creates a loot release component and spawn origin. Add contents whose drop fragments reference physical pickup prefabs.", MessageType.Info);
 
             ChestCreationPlan plan = new ChestCreationPlan

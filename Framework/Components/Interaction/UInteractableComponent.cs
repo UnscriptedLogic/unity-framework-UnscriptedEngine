@@ -9,6 +9,8 @@ namespace UnscriptedEngine
     {
         public event Action<UInteractArgs> OnButtonPressedServer;
         public event Action<UInteractArgs> OnButtonPressedClient;
+        /// <summary>Successful completion on the initiating client (or offline). Suitable for local presentation.</summary>
+        public event Action<UInteractArgs> InteractedLocally;
         public event Action<UInteractArgs> InteractionStarted;
         public event Action<UInteractArgs> InteractionInterrupted;
         public event Action<UInteractArgs> InteractionCompleted;
@@ -324,6 +326,7 @@ namespace UnscriptedEngine
                         onButtonPressedClientWithSource?.Invoke(source);
                         if (localInteractor)
                         {
+                            InteractedLocally?.Invoke(args);
                             onButtonInteractedLocally?.Invoke();
                             onButtonInteractedLocallyWithSource?.Invoke(source);
                         }

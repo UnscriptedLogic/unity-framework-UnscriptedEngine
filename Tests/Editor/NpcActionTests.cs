@@ -66,6 +66,24 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void ClimbingCanCountVerticalProgressAndGroundedConfigurationResetsIt()
+        {
+            Navigation navigation = new Navigation();
+            NpcMoveAction action = new NpcMoveAction(navigation);
+            action.Configure(Vector3.up * 10f, 0.3f, 20f, 2f, 0.1f, true);
+            action.Start();
+            for (int index = 1; index <= 4; index++)
+            {
+                navigation.Position = Vector3.up * index;
+                Assert.That(action.Tick(1f), Is.EqualTo(NpcActionStatus.Running));
+            }
+            action.Configure(Vector3.up * 10f, 0.3f, 20f, 2f, 0.1f);
+            action.Start();
+            navigation.Position += Vector3.up;
+            Assert.That(action.Tick(2f), Is.EqualTo(NpcActionStatus.Failed));
+        }
+
+        [Test]
         public void ProgressResetsStallButCannotExtendOverallDeadline()
         {
             Navigation navigation = new Navigation();

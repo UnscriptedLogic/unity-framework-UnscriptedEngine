@@ -115,7 +115,7 @@ namespace UnscriptedEngine
 
         private void ApplyPossessedPawnReference(NetworkObjectReference pawnReference)
         {
-            if (pawnReference.TryGet(out NetworkObject pawnObject) && pawnObject.TryGetComponent(out UPawn pawn))
+            if (pawnReference.TryGet(out NetworkObject pawnObject, NetworkManager) && pawnObject.TryGetComponent(out UPawn pawn))
             {
                 SetPawnFromPossession(pawn);
                 return;

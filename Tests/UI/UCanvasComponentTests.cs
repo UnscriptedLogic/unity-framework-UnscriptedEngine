@@ -72,6 +72,30 @@ namespace UnscriptedEngine.Tests
             Assert.That(InputFocus.IsBlocked(controller), Is.True);
         }
 
+        [Test] public void InventoryPanelConsumesInputsAndReleasesOnlyItsOwnFocus()
+        {
+            InventoryTransferPanel inventory = canvas.CreateCanvas<InventoryTransferPanel>();
+            Assert.That(inventory.InputPolicy, Is.EqualTo(CanvasInputPolicy.Modal));
+            Assert.That(InputFocus.IsBlocked(controller), Is.True);
+            Assert.That(Cursor.visible, Is.True);
+            Assert.That(Cursor.lockState, Is.EqualTo(CursorLockMode.None));
+            Assert.That(EventBus.Publish(new CanvasTestInput(controller)), Is.False);
+
+            CanvasTestWidget settings = canvas.Show(prefab);
+            inventory.Close();
+            Assert.That(InputFocus.IsBlocked(controller), Is.True, "Settings still owns a modal focus lease.");
+            canvas.Close(settings);
+            Assert.That(InputFocus.IsBlocked(controller), Is.False);
+        }
+
+        [Test] public void InventoryBackClosesThroughCanvasController()
+        {
+            InventoryTransferPanel inventory = canvas.CreateCanvas<InventoryTransferPanel>();
+            Assert.That(inventory.HandleBack(), Is.True);
+            Assert.That(canvas.FocusedCanvas, Is.Null);
+            Assert.That(InputFocus.IsBlocked(controller), Is.False);
+        }
+
         [Test] public void LayerOutranksRecencyAndPassiveOverlayDoesNotStealFocus()
         {
             var modal = canvas.Show(prefab, widget => widget.TestLayer = CanvasLayer.Modal);

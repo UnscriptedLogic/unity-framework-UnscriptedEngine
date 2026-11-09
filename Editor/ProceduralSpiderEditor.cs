@@ -87,7 +87,7 @@ namespace Framework.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
-            EditorGUILayout.HelpBox("Angles define rest shape, not hard joint limits. IK bends to reach planted feet. After shape edits, rebuild geometry. Generated blocks have no colliders. Exclude body colliders using Surface Layers.", MessageType.Info);
+            EditorGUILayout.HelpBox("Angles define rest shape, not hard joint limits. IK bends to reach planted feet. After shape edits, rebuild geometry. Avoid Obstacles checks block volumes against Surface Layers and swivels joints around the planted foot. Wall Clearance adds a size-scaled margin. Exclude body colliders using Surface Layers. Impossible clearances can still clip; red gizmos show blocked legs.", MessageType.Info);
             if (GUILayout.Button("Rebuild Geometry")) RebuildSelected(null);
             if (GUILayout.Button("Preset: Spider (2 Sections)"))
                 RebuildSelected(new[] { new SpiderLegSection(0.8f, 40f), new SpiderLegSection(1.1f, -110f) });

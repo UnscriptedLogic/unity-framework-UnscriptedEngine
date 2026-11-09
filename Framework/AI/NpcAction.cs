@@ -44,6 +44,7 @@ namespace UnscriptedEngine
         private float timeout;
         private float stuckTimeout;
         private float progressDistance;
+        private bool includeVerticalProgress;
         private float elapsed;
         private float stalled;
         private NpcActionStatus status;
@@ -53,11 +54,18 @@ namespace UnscriptedEngine
         public void Configure(Vector3 target, float arrivalDistance, float maxDuration,
             float maxStallDuration, float minimumProgress)
         {
+            Configure(target, arrivalDistance, maxDuration, maxStallDuration, minimumProgress, false);
+        }
+
+        public void Configure(Vector3 target, float arrivalDistance, float maxDuration,
+            float maxStallDuration, float minimumProgress, bool trackVerticalProgress)
+        {
             destination = target;
             stoppingDistance = Mathf.Max(0.01f, arrivalDistance);
             timeout = Mathf.Max(0.1f, maxDuration);
             stuckTimeout = Mathf.Max(0.1f, maxStallDuration);
             progressDistance = Mathf.Max(0.01f, minimumProgress);
+            includeVerticalProgress = trackVerticalProgress;
         }
 
         public void Start()
@@ -82,7 +90,7 @@ namespace UnscriptedEngine
             elapsed += step;
             stalled += step;
             Vector3 displacement = navigation.Position - progressPosition;
-            displacement.y = 0f;
+            if (!includeVerticalProgress) displacement.y = 0f;
             if (displacement.sqrMagnitude >= progressDistance * progressDistance)
             {
                 progressPosition = navigation.Position;
