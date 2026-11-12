@@ -1,5 +1,7 @@
 # Code-defined, scene-activated settings
 
+🔊 **Shared audio:** see [Audio usage and architecture](../Audio/README.md). Audio registers master and category settings application-wide at startup; these settings stay active without a scene provider. Other settings retain the scene activation rules below.
+
 Declare settings in C#. Add catalog-provider components to a scene-local **Settings Container** GameObject. The persistent service owns values, defaults, validation, notifications, and saved preferences. Code declarations alone never activate settings.
 
 ## Getting started

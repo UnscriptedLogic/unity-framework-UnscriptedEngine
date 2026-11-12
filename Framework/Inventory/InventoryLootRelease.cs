@@ -41,6 +41,9 @@ namespace UnscriptedEngine
         private bool showGizmos = true;
         private bool releasing;
 
+        /// <summary>Bind a reusable drop presenter without editor-only reflection or a game-mode dependency.</summary>
+        public void Configure(UInventoryComponent source) => inventory = source;
+
         public int Release()
         {
             if (releasing || inventory == null) return 0;

@@ -1,5 +1,9 @@
 # Framework tests and architecture gaps
 
+## Shared audio tests
+
+`AudioRuntimeTests` runs in EditMode and checks stable legacy IDs/defaults and saved settings activation. `AudioPlaybackTests` runs in PlayMode in `UnscriptedEngine.Audio.Tests`: checks master/category multiplication, live category changes, duplicate binding rejection, disposal, pool capacity, and stale handle safety. See [audio documentation](../Framework/Audio/README.md) for manual UI and disabled-domain-reload checks. Runtime tests are authored separately from compilation validation; use Unity Test Runner to execute them.
+
 ## Running
 
 Attachable test components live in `Tests/Runtime` in the runtime-capable `UnscriptedEngine.Tests.Support` assembly. Keep them out of the Editor test assembly: Unity rejects Editor-only MonoBehaviours even when an EditMode test enters Play Mode. The network lifecycle test authors temporary prefab assets before entering Play Mode, registers them with Netcode, and deletes its unique asset folder during teardown. Runtime-generated NetworkObjects without prefab IDs are not valid fixtures for this Netcode version.
