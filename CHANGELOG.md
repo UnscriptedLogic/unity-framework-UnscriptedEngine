@@ -1,3 +1,9 @@
+# V0.29.0
+
+- Add independent object move, rotate, and scale effects coordinated by ObjectAnimBrain, with curve tweens, punch, wiggle, finite/infinite repeat, scaled/unscaled time, replay, hold, and pose restoration.
+- Keep object animation independent of UI, gameplay, Netcode, and host tween plugins. Add focused regression coverage and Docs/ObjectAnimation.md.
+- Align package.json with the versioned framework history (previous manifest remained at 0.2.1).
+
 # Unreleased
 
 - Add an overhead speech-bubble creator for existing pawns and a standalone SpeechBubbleInteraction component, with local-only interaction completion events, timed greetings, and independent shop/quest composition.

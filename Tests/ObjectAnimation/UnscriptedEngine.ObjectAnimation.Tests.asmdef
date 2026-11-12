@@ -1,0 +1,8 @@
+{
+    "name": "UnscriptedEngine.ObjectAnimation.Tests",
+    "references": ["UnscriptedEngine", "UnityEngine.TestRunner"],
+    "overrideReferences": true,
+    "precompiledReferences": ["nunit.framework.dll"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}
