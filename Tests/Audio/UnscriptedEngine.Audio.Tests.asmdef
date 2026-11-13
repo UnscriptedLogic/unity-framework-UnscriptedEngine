@@ -1,6 +1,6 @@
 {
     "name": "UnscriptedEngine.Audio.Tests",
-    "references": ["UnscriptedEngine", "UnityEngine.TestRunner"],
+    "references": ["UnscriptedEngine"],
     "optionalUnityReferences": ["TestAssemblies"],
     "defineConstraints": ["UNITY_INCLUDE_TESTS"]
 }
