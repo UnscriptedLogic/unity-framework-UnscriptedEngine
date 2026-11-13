@@ -1,0 +1,4 @@
+interface:
+  display_name: "Unscripted Modular Code"
+  short_description: "Composable code with clear owners and useful providers"
+  default_prompt: "Use $unscripted-modular-code to build this feature with reusable pieces, descriptive functions, and clear ownership."
