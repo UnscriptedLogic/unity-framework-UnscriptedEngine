@@ -546,6 +546,7 @@ namespace UnscriptedEngine
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
+            UnscriptedEngine.Gameplay.ColliderZone.ForwardControllerHit(hit);
             if (!collectingCollisionLoss || hit.normal.y >=
                 Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)) return;
 

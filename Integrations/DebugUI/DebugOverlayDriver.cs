@@ -21,6 +21,7 @@ namespace UnscriptedEngine.UI
         private Text rightText;
         private float nextRefresh;
         private EntityDebugDisplay entityDisplay;
+        private readonly ColliderZoneDebugDisplay zoneDisplay = new ColliderZoneDebugDisplay();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Initialize()
@@ -35,6 +36,8 @@ namespace UnscriptedEngine.UI
         {
             List<SettingDefinition> definitions = new List<SettingDefinition>(DebugEntities.Definitions);
             definitions.Add(DebugOverlay.VisibleSetting);
+            definitions.Add(ColliderZoneDebugDisplay.VisibleSetting);
+            definitions.Add(ColliderZoneDebugDisplay.FaceOpacitySetting);
             registration = SettingsRuntime.Service.Register(definitions);
             visibilitySubscription = SettingsRuntime.Service.Observe(DebugOverlay.VisibleSetting, SetVisible);
         }
@@ -55,6 +58,7 @@ namespace UnscriptedEngine.UI
         private void LateUpdate()
         {
             if (!DebugOverlay.IsVisible) return;
+            zoneDisplay.Draw(null);
             if (Time.unscaledTime < nextRefresh)
             {
                 entityDisplay?.UpdatePositions();
@@ -71,6 +75,7 @@ namespace UnscriptedEngine.UI
                 column.Append(entry.Name).Append(": ").Append(entry.Value);
             }
             entityDisplay?.Refresh(right);
+            zoneDisplay.Draw(right);
             RefreshColumn(leftText, left);
             RefreshColumn(rightText, right);
         }
@@ -153,6 +158,7 @@ namespace UnscriptedEngine.UI
 
         private void OnDisable()
         {
+            zoneDisplay.Dispose();
             visibilitySubscription?.Dispose();
             visibilitySubscription = null;
             registration?.Dispose();

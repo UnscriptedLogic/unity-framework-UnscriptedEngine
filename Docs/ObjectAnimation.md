@@ -30,4 +30,4 @@ Stop freezes the current pose and cancels completion. ResetPose stops and restor
 
 Example: `recoil.Play();` after a successful fire action, or `processing.ResetPose();` when processing ends. Keep those subscriptions in the gameplay adapter; the package has no knowledge of chests, machines, or weapons. Effects are not replicated; gameplay decides which clients trigger presentation.
 
-The sandbox's `Assets/Prototypes/ObjectTweening/ObjectTweenDemo.unity` provides all three recipes with buttons. See its README for verification steps. Focused PlayMode tests are in Tests/ObjectAnimation; run with the host's package testables enabled. They include real disable callbacks, dispatcher registration, and scaled/unscaled playback while paused.
+The sandbox's `Assets/Prototypes/Default/Experiments/Presentation/ObjectTweening/ObjectTweenDemo.unity` provides all three recipes with buttons. See its README for verification steps. Focused PlayMode tests are in Tests/ObjectAnimation; run with the host's package testables enabled. They include real disable callbacks, dispatcher registration, and scaled/unscaled playback while paused.

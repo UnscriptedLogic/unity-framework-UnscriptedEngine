@@ -6,6 +6,20 @@ Personal minimal Persona-esque: high contrast, asymmetry, deliberate diagonals, 
 
 Use offset or slanted title ribbons, hard-edged panels, thin inset borders, and occasional diagonal full-bleed bars. Keep large content regions simple. Background patterns are subordinate: oversized dark repeated lettering, low-contrast checkerboard, or dimmed gameplay. Avoid multiplying competing angles. Decorative shapes may bleed off screen; content and controls stay within safe bounds.
 
+### Layered backing recipe
+
+The user's corrected header in [layered-header.png](layered-header.png) defines the preferred backing accent. A dark foreground shape sits over a slightly larger saturated copy of its backdrop. The colored layer has its own angle and a small offset. It peeks out unevenly at selected edges and corners, giving the composition a cut-paper appearance.
+
+- Keep an upright parent for layout and hit areas. Arrange siblings in draw order: `Accent`, foreground `Ribbon`/surface, then text/content.
+- Reuse the foreground's base silhouette or image for the accent. Enlarge it slightly with rect margins or scale, then adjust its rotation and position independently. Tune the exposed edges against the reference; do not enlarge the whole widget or create a thick uniform outline.
+- Keep the foreground dark and text readable. The accent can show as a broad wedge at one corner and a fine sliver along another edge. A thin underline alone does not reproduce this backing treatment.
+- Use the existing Corner Warp material when following the corrected header's quadrilateral shape. In Unity, inspect `Integrations/UI/Shaders/CornerWarp.shader` and `UnscriptedEngine_UI_Corner Warp.mat`. The current header uses sprite-free Images with this shared material and separate Image tints. Preserve that setup rather than restoring the old slanted sprite. Reuse a material for the same shape; a different corner configuration needs its own deliberate material/shape rather than mutating every shared instance.
+- The title may have its own restrained tilt, as in the reference. Keep paragraphs and control hit areas upright. Do not apply one global angle to every layer or reuse the header's numeric offsets without checking the destination size.
+
+Apply the treatment where an accent backing serves the hierarchy, especially title blocks and prominent surfaces. Thin separators, progress tracks, and semantic markers can retain their own simpler geometry. Preserve a separately requested UI style.
+
+The current `Persona_Header.prefab` is the concrete Unity reference. Its edited appearance takes precedence over older generated examples. `PersonaLayeredStyle.Apply` supplies the shared authoring recipe when generating new pieces; its existing-prefab update preserves the authored header. Reuse that prefab and recipe rather than reintroducing the old thin-underline default. If the user revises the reference again, align the recipe with the new source before regeneration.
+
 Use bold condensed, readable display text for game headings and compact labels. Portfolio headings can use a more angular italic display face; body copy uses a clean readable face. Exact font identities are unverified: inspect project TMP assets rather than inventing a font attribution. White text with a dark edge/shadow can preserve legibility over moving backgrounds. Do not skew paragraphs or distort icons with their containers.
 
 ## Composition recipes
@@ -25,7 +39,7 @@ Initial tuning suggestions, **not measured source timings**: focus 80–140 ms; 
 
 ## Evidence files
 
-Images: `portfolio.png`, `season-overview.png`, `index.png` beside this document. Recordings: `portfolio.mp4`, `momentum-mayhem.mp4`, `ui-designer.mp4`. These are copied user references; retain them with the skill so temporary filesystem paths are unnecessary.
+Images: `portfolio.png`, `season-overview.png`, `index.png`, and `layered-header.png` beside this document. The layered header is the user's explicit correction for accent construction and takes precedence on that detail. Recordings: `portfolio.mp4`, `momentum-mayhem.mp4`, `ui-designer.mp4`. These are copied user references; retain them with the skill so temporary filesystem paths are unnecessary.
 
 External sources supplied by the user:
 
@@ -37,4 +51,4 @@ External sources supplied by the user:
 
 Website and repository fetches failed during initial authoring (2026-11-13). They have **not** been inspected for asset paths, exact fonts, animation parameters, or APIs. If reachable in a future task, inspect their actual assets and implementations before reusing them. Do not fabricate repository findings.
 
-Local API inventory: package `Integrations/UI/UIAnimReactive.cs`, `UIAnimReactive_Hide.cs`, and `UIAnimReactive_Shake.cs` provide value-threshold reactive effects. `Framework/Animation/ObjectAnimBrain` provides object animation separately. The user authorized general UIAnims components at host-project-relative `Assets/Prototypes/UIAnims/`: `UIAnim` provides move/scale/alpha transitions and `UIAnimGroup` provides stagger/completion/input gating. Read their real source and README. `Assets/Prototypes/PersonaUIKit/TransitionDemo` assembles the three screen examples through UCanvasController. Host prototype scripts must be included separately when carrying the package to another project.
+Local API inventory: package `Integrations/UI/UIAnimReactive.cs`, `UIAnimReactive_Hide.cs`, and `UIAnimReactive_Shake.cs` provide value-threshold reactive effects. `Framework/Animation/ObjectAnimBrain` provides object animation separately. The user authorized general UIAnims components at host-project-relative `Assets/Prototypes/Default/Experiments/Presentation/UIAnims/`: `UIAnim` provides move/scale/alpha transitions and `UIAnimGroup` provides stagger/completion/input gating. Read their real source and README. `Assets/Prototypes/Default/Experiments/Presentation/PersonaUIKit/TransitionDemo` assembles the three screen examples through UCanvasController. Host prototype scripts must be included separately when carrying the package to another project.

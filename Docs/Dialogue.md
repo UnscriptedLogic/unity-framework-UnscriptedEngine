@@ -6,7 +6,7 @@ Dialogue assets and sessions live in `UnscriptedEngine.Dialogue` without UI depe
 
 Use **Tools > UnscriptedEngine > Dialogue > Create Demo** in an empty scene, then enter Play Mode. The example creates a camera if needed, an NPC, input/event system if needed, and three buttons for bottom-panel dialogue, world bubbles, and timed chatter. Continue first reveals the complete text, then advances. Both interactive views use the same branching asset. Switching modes cancels the previous conversation.
 
-Demo scripts are under `Assets/Prototypes/Dialogue`, in their own namespace and assemblies. All generated objects and transient dialogue assets are cleaned up with the demo. Import TMP Essential Resources if the project has no default TMP font.
+Demo scripts are under `Assets/Prototypes/Default/Experiments/Gameplay/Dialogue`, in their own namespace and assemblies. All generated objects and transient dialogue assets are cleaned up with the demo. Import TMP Essential Resources if the project has no default TMP font.
 
 ## Author a conversation
 

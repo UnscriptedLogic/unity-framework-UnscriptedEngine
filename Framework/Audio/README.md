@@ -1,5 +1,7 @@
 # 🔊 Shared audio
 
+👣 [Movement-driven footsteps](Footsteps.md): setup, cadence, and limitations.
+
 Any main-thread script can use `UnscriptedEngine.Audio.AudioRuntime`. No manager prefab, mixer asset, or `DefaultGameInstance` required. Runtime bootstraps before the first scene and survives scene changes.
 
 ## Quick start 🎮

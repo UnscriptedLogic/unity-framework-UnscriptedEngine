@@ -44,7 +44,7 @@ namespace UnscriptedEngine.UI.Editor
             using (new EditorGUI.DisabledScope(problem != null || string.IsNullOrWhiteSpace(greeting) || EditorApplication.isPlayingOrWillChangePlaymode))
             {
                 if (!GUILayout.Button("Create and Wire Speech Bubble")) return;
-                string folder = AssetDatabase.IsValidFolder("Assets/Prototypes/Dialogue") ? "Assets/Prototypes/Dialogue" : "Assets";
+                string folder = AssetDatabase.IsValidFolder("Assets/Prototypes/Default/Experiments/Gameplay/Dialogue") ? "Assets/Prototypes/Default/Experiments/Gameplay/Dialogue" : "Assets";
                 string assetPath = EditorUtility.SaveFilePanelInProject("Save greeting conversation", "Greeting", "asset", "Choose a new asset path for this pawn's greeting.", folder);
                 if (string.IsNullOrEmpty(assetPath)) return;
                 try

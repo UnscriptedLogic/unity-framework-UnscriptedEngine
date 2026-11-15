@@ -14,6 +14,12 @@ namespace UnscriptedEngine.UI.Settings
         private SettingsTheme theme;
         [SerializeField, Tooltip("Optional custom content parent with a layout group and scroll sizing. Leave empty to create the full template with search and advanced filtering.")]
         private RectTransform content;
+        [SerializeField]
+        [Tooltip("Optional themed group button. Its caption can use TextMeshPro; leave empty for the testing template.")]
+        private Button groupHeaderPrefab;
+        [SerializeField]
+        [Tooltip("Optional TextMeshPro empty-state prefab for custom layouts.")]
+        private TMPro.TMP_Text emptyStatePrefab;
         private SettingsService service;
         private string search = "";
         private bool showAdvanced;
@@ -119,7 +125,15 @@ namespace UnscriptedEngine.UI.Settings
                 generated.Add(CreateGroup(group, content).gameObject);
             }
             if (generated.Count == 0)
-                generated.Add(SettingsTemplateUI.Label(content, "No active settings match this view.").gameObject);
+            {
+                if (emptyStatePrefab != null)
+                {
+                    TMPro.TMP_Text empty = Instantiate(emptyStatePrefab, content);
+                    empty.text = "No active settings match this view.";
+                    generated.Add(empty.gameObject);
+                }
+                else generated.Add(SettingsTemplateUI.Label(content, "No active settings match this view.").gameObject);
+            }
         }
 
         private void ClearGeneratedGroups()
@@ -140,7 +154,9 @@ namespace UnscriptedEngine.UI.Settings
             SettingsTemplateUI.Vertical(root, 4);
             bool isCollapsed = string.IsNullOrWhiteSpace(search) &&
                 collapsed.TryGetValue(group.Path, out bool previouslyCollapsed) && previouslyCollapsed;
-            Button header = SettingsTemplateUI.Button(root, GetGroupCaption(group, isCollapsed));
+            Button header = groupHeaderPrefab != null ? Instantiate(groupHeaderPrefab, root) :
+                SettingsTemplateUI.Button(root, GetGroupCaption(group, isCollapsed));
+            SetGroupCaption(header, GetGroupCaption(group, isCollapsed));
             RectTransform body = SettingsTemplateUI.Rect("Body", root);
             SettingsTemplateUI.Vertical(body, 8);
             CreateSettingRows(group, body);
@@ -168,7 +184,18 @@ namespace UnscriptedEngine.UI.Settings
             bool shouldCollapse = body.gameObject.activeSelf;
             collapsed[group.Path] = shouldCollapse;
             body.gameObject.SetActive(!shouldCollapse);
-            header.GetComponentInChildren<Text>().text = GetGroupCaption(group, shouldCollapse);
+            SetGroupCaption(header, GetGroupCaption(group, shouldCollapse));
+        }
+
+        private static void SetGroupCaption(Button header, string caption)
+        {
+            TMPro.TMP_Text label = header.GetComponentInChildren<TMPro.TMP_Text>();
+            if (label != null) label.text = caption;
+            else
+            {
+                Text legacy = header.GetComponentInChildren<Text>();
+                if (legacy != null) legacy.text = caption;
+            }
         }
 
         private static string GetGroupCaption(SettingsGroup group, bool isCollapsed)
