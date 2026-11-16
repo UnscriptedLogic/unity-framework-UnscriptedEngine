@@ -139,6 +139,9 @@ namespace UnscriptedEngine
         }
 
         /// <summary>Override for permissions, inventory requirements, or other gameplay rules.</summary>
+        public bool CanOfferInteraction(GameObject interactor) => CanInteract(interactor)
+            && (repeatable || !IsCompleted) && (!IsActive || ActiveInteractor == interactor);
+
         protected virtual bool CanInteract(GameObject interactor)
         {
             if (!isActiveAndEnabled) return false;
@@ -146,8 +149,20 @@ namespace UnscriptedEngine
             if (interactor == null) return interactionMode == InteractionMode.Instant;
             if (!interactor.activeInHierarchy) return false;
             if (IsSpawned && interactor.TryGetComponent(out UPawn pawn) && !pawn.IsPossessed) return false;
-            Vector3 point = interactionPoint != null ? interactionPoint.position : transform.position;
-            return (interactor.transform.position - point).sqrMagnitude <= maximumUseDistance * maximumUseDistance;
+            Vector3 source = interactor.transform.position;
+            if (interactionPoint != null)
+                return (source - interactionPoint.position).sqrMagnitude <= maximumUseDistance * maximumUseDistance;
+            float distanceSquared = float.PositiveInfinity;
+            foreach (Collider shape in GetComponentsInChildren<Collider>())
+            {
+                if (!shape.enabled || shape.isTrigger || shape.GetComponentInParent<UInteractableComponent>() != this) continue;
+                // Unity cannot query ClosestPoint on a non-convex mesh collider.
+                Vector3 point = shape is MeshCollider mesh && !mesh.convex
+                    ? shape.bounds.ClosestPoint(source) : shape.ClosestPoint(source);
+                distanceSquared = Mathf.Min(distanceSquared, (source - point).sqrMagnitude);
+            }
+            if (float.IsPositiveInfinity(distanceSquared)) distanceSquared = (source - transform.position).sqrMagnitude;
+            return distanceSquared <= maximumUseDistance * maximumUseDistance;
         }
 
         protected override void Tick(float deltaTime)

@@ -21,6 +21,7 @@ namespace UnscriptedEngine
             public float BodyYaw;
             public bool JumpPressed;
             public Vector3 ExternalVelocityChange;
+            public Vector3 SupportDisplacement;
             public bool IsFlying;
 
             public bool Equals(CharacterMoveInput other)
@@ -33,6 +34,7 @@ namespace UnscriptedEngine
                     && ControlYaw.Equals(other.ControlYaw)
                     && BodyYaw.Equals(other.BodyYaw)
                     && ExternalVelocityChange.Equals(other.ExternalVelocityChange)
+                    && SupportDisplacement.Equals(other.SupportDisplacement)
                     && JumpPressed == other.JumpPressed
                     && IsFlying == other.IsFlying;
             }
@@ -142,6 +144,13 @@ namespace UnscriptedEngine
                 NetworkVariableReadPermission.Everyone,
                 NetworkVariableWritePermission.Server);
 
+        [Header("Moving Ground")]
+        [SerializeField] private bool followMovingGround = true;
+        [SerializeField, Min(0f)] private float maximumGroundCarryPerStep = 5f;
+        private Transform groundSupport;
+        private Vector3 supportLocalPoint, supportWorldPoint;
+        private Transform contactedSupport;
+        private bool collectingGround;
         private CharacterController characterController;
         private CharacterMoveInput[] inputBuffer;
         private CharacterMoveState[] stateBuffer;
@@ -433,6 +442,7 @@ namespace UnscriptedEngine
                 BodyYaw = transform.eulerAngles.y,
                 JumpPressed = jumpQueued,
                 ExternalVelocityChange = pendingExternalVelocityChange,
+                SupportDisplacement = GetSupportDisplacement(),
                 IsFlying = isFlying
             };
 
@@ -481,6 +491,9 @@ namespace UnscriptedEngine
             }
             isGrounded = characterController.isGrounded;
             isFlying = input.IsFlying;
+            if (isFlying) groundSupport = null;
+            if (!isFlying && input.SupportDisplacement.sqrMagnitude > 0f)
+                characterController.Move(input.SupportDisplacement);
 
             if (isFlying)
             {
@@ -524,6 +537,8 @@ namespace UnscriptedEngine
             }
 
             velocity += input.ExternalVelocityChange;
+            contactedSupport = null;
+            collectingGround = true;
             collectingCollisionLoss = reduceSpeedOnCollision;
             CollisionFlags collisionFlags;
             try
@@ -533,10 +548,17 @@ namespace UnscriptedEngine
             finally
             {
                 collectingCollisionLoss = false;
+                collectingGround = false;
             }
             velocity.x *= collisionRetention;
             velocity.z *= collisionRetention;
             isGrounded = (collisionFlags & CollisionFlags.Below) != 0;
+            groundSupport = isGrounded && !input.JumpPressed ? contactedSupport : null;
+            if (groundSupport != null)
+            {
+                supportWorldPoint = transform.position;
+                supportLocalPoint = groundSupport.InverseTransformPoint(supportWorldPoint);
+            }
 
             if (isGrounded && velocity.y < 0f)
             {
@@ -544,9 +566,21 @@ namespace UnscriptedEngine
             }
         }
 
+        private Vector3 GetSupportDisplacement()
+        {
+            if (!followMovingGround || groundSupport == null || !groundSupport.gameObject.activeInHierarchy || isFlying)
+                return Vector3.zero;
+            Vector3 delta = groundSupport.TransformPoint(supportLocalPoint) - supportWorldPoint;
+            // Teleporting supports must not drag the character across the level.
+            return delta.sqrMagnitude <= maximumGroundCarryPerStep * maximumGroundCarryPerStep ? delta : Vector3.zero;
+        }
+
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
             UnscriptedEngine.Gameplay.ColliderZone.ForwardControllerHit(hit);
+            if (collectingGround && hit.normal.y >= Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)
+                && !hit.transform.IsChildOf(transform))
+                contactedSupport = hit.collider.transform;
             if (!collectingCollisionLoss || hit.normal.y >=
                 Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)) return;
 
@@ -613,6 +647,8 @@ namespace UnscriptedEngine
             // Apply only on the receiving server, never during owner prediction
             // or reconciliation replay, which must preserve current local look.
             transform.rotation = Quaternion.Euler(0f, input.BodyYaw, 0f);
+            // Derive carry on the server; client supplied displacement is never authoritative.
+            input.SupportDisplacement = GetSupportDisplacement();
             SimulateMove(input);
             lastProcessedServerTick = input.Tick;
             authoritativeState.Value = CaptureState(input.Tick);
@@ -767,6 +803,7 @@ namespace UnscriptedEngine
 
         private void ResetPredictionState()
         {
+            groundSupport = null;
             localTick = 0;
             lastProcessedServerTick = -1;
             lastReceivedServerTick = -1;

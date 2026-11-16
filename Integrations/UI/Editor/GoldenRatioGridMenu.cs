@@ -37,11 +37,11 @@ namespace UnscriptedEngine.UI.Editor
             {
                 GameObject canvasObject = new GameObject("Golden Ratio Canvas",
                     typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-                StageUtility.PlaceGameObjectInCurrentStage(canvasObject);
                 if (parent != null)
                 {
                     SceneManager.MoveGameObjectToScene(canvasObject, parent.gameObject.scene);
                 }
+                else StageUtility.PlaceGameObjectInCurrentStage(canvasObject);
                 Undo.RegisterCreatedObjectUndo(canvasObject, "Create Golden Ratio Canvas");
                 if (parent != null)
                 {
@@ -54,7 +54,7 @@ namespace UnscriptedEngine.UI.Editor
 
             GameObject gridObject = new GameObject("Golden Ratio Grid",
                 typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(LayoutElement));
-            StageUtility.PlaceGameObjectInCurrentStage(gridObject);
+            // Keep the new object a root until it has been moved to the parent's scene.
             SceneManager.MoveGameObjectToScene(gridObject, parent.gameObject.scene);
             Undo.RegisterCreatedObjectUndo(gridObject, "Create Golden Ratio Grid");
             Undo.SetTransformParent(gridObject.transform, parent, "Parent Golden Ratio Grid");

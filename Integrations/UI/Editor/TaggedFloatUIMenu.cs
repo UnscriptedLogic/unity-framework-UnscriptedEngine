@@ -102,8 +102,9 @@ namespace UnscriptedEngine.UI.Editor
         private static GameObject CreateObject(string name, Transform parent, params System.Type[] components)
         {
             GameObject created = new GameObject(name, typeof(RectTransform));
-            StageUtility.PlaceGameObjectInCurrentStage(created);
+            // Move while still a root. Stage placement can parent objects in Prefab Mode.
             if (parent != null) SceneManager.MoveGameObjectToScene(created, parent.gameObject.scene);
+            else StageUtility.PlaceGameObjectInCurrentStage(created);
             Undo.RegisterCreatedObjectUndo(created, "Create " + name);
             if (parent != null)
             {

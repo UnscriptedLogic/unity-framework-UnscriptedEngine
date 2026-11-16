@@ -51,6 +51,21 @@ classes use the global namespace. File names and class names use `PREFIX_Name`.
 Asset failures roll back assets from that attempt and retain source files for repair
 and retry. File creation itself is not part of scene Undo.
 
+## Gameplay tag selection
+
+Inspector fields referencing `GameplayTag` assets include a **Tags** button. It opens
+a searchable picker grouped by the asset's dotted **Path**: `Parent.Child` appears
+under **Parent**, and `Parent.Child.Grandchild` under **Parent > Child**. Full paths
+remain visible in search results. Tags with duplicate paths show their asset paths
+to distinguish them. **None** clears the reference; the original object field still
+supports drag-and-drop and pinging the selected asset. Lists and multi-object editing
+use the same picker, with normal serialized Undo and prefab overrides.
+
+Create tags using **Assets > Create > Unscripted Engine > Gameplay Tag**, then set
+their **Path**. Categories are derived from names and do not require parent assets.
+Runtime child matching still uses the tag's explicit **Parent** reference; dotted
+names alone do not change matching behavior. The picker does not rename existing tags.
+
 ## UI setup
 
 Use **Tools > UnscriptedEngine > Create UI...**, enter a name, choose a root output

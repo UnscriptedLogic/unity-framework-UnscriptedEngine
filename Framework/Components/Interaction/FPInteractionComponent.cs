@@ -42,7 +42,7 @@ namespace UnscriptedEngine
             }
 
             UInteractableComponent button = _hitInfo.collider.GetComponentInParent<UInteractableComponent>();
-            hasTarget = button != null && button.isActiveAndEnabled;
+            hasTarget = button != null && button.CanOfferInteraction(gameObject);
             target = hasTarget ? button : null;
             _buttonComponents = hasTarget ? null : Array.Empty<UInteractableComponent>();
         }
