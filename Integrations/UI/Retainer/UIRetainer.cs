@@ -35,13 +35,18 @@ namespace UnscriptedEngine.UI
         [SerializeField]
         private float refreshRate = 60f;
         [Header("Warp")]
-        [Tooltip("Radial curvature. Zero disables curvature; positive values bend the panel inward.")]
-        [Range(0f, 0.5f)]
+        [Tooltip("Radial curvature from -0.5 to 0.5. Zero disables curvature; negative values reverse the bend.")]
+        [Range(-0.5f, 0.5f)]
         [SerializeField]
         private float curvature = 0.08f;
         [Tooltip("Horizontal and vertical perspective strength. Combined absolute strength is clamped below one.")]
         [SerializeField]
         private Vector2 perspective;
+        [Tooltip("Perspective lens FOV in degrees. Higher values exaggerate convergence; 60 preserves baseline strength.")]
+        [Range(1f, 150f)]
+        [SerializeField] private float perspectiveFOV = 60f;
+        [Tooltip("Fit the complete warped capture inside the panel, preserving aspect ratio.")]
+        [SerializeField] private bool fitContent = true;
         [Header("Debug")]
         [Tooltip("Draw the capture rectangle and texture size label when selected.")]
         [SerializeField]
@@ -52,6 +57,10 @@ namespace UnscriptedEngine.UI
         private Camera captureCamera;
         private Canvas captureCanvas;
         private GraphicRaycaster captureRaycaster;
+        private UIRetainerCaptureOwner cleanupOwner;
+        private bool cleanupPending;
+        private bool destroying;
+        private bool quitting;
         private RenderTexture texture;
         private Material materialInstance;
         private Texture previousTexture;
@@ -86,9 +95,12 @@ namespace UnscriptedEngine.UI
                 return canvas.renderMode == RenderMode.WorldSpace ? Camera.main : null;
             }
         }
-        public float Curvature { get => curvature; set => curvature = Mathf.Clamp(value, 0f, 0.5f); }
+        public float Curvature { get => curvature; set => curvature = Mathf.Clamp(value, -0.5f, 0.5f); }
         public Vector2 Perspective { get => perspective; set => perspective = ClampPerspective(value); }
-        public Vector2 MapToSource(Vector2 uv) => UIRetainerWarp.MapToSource(uv, curvature, ClampPerspective(perspective));
+        public float PerspectiveFOV { get => perspectiveFOV; set => perspectiveFOV = Mathf.Clamp(value, 1f, 150f); }
+        public bool FitContent { get => fitContent; set => fitContent = value; }
+        public Vector2 MapToSource(Vector2 uv) => UIRetainerWarp.MapToSource(uv, curvature, perspective, perspectiveFOV, fitContent);
+        public Vector2 MapFromSource(Vector2 uv) => UIRetainerWarp.MapFromSource(uv, curvature, perspective, perspectiveFOV, fitContent);
         public void RequestRefresh() => refreshRequested = true;
 
         /// <summary>Call after adding or removing captured objects. Updates layer ownership and requests a capture.</summary>
@@ -108,18 +120,32 @@ namespace UnscriptedEngine.UI
                 if (!previousLayers.ContainsKey(child.gameObject)) previousLayers.Add(child.gameObject, child.gameObject.layer);
                 child.gameObject.layer = captureLayer;
             }
+            RefreshBindingOwners();
             RequestRefresh();
+        }
+
+        private void RefreshBindingOwners()
+        {
+            if (content == null) return;
+            foreach (TaggedFloatBinding binding in content.GetComponentsInChildren<TaggedFloatBinding>(true)) binding.RefreshOwner();
+        }
+
+        private void OnTransformParentChanged()
+        {
+            if (captureRoot != null && !cleanupPending) RefreshBindingOwners();
         }
 
         private static Vector2 ClampPerspective(Vector2 value)
         {
-            float magnitude = Mathf.Abs(value.x) + Mathf.Abs(value.y);
-            return magnitude > 0.8f ? value * (0.8f / magnitude) : value;
+            return UIRetainerWarp.ClampPerspective(value);
         }
 
         private void OnEnable()
         {
             if (!Application.isPlaying) return;
+            if (cleanupPending) return; // The independent cleanup owner restarts capture once restoration is safe.
+            quitting = false;
+            destroying = false;
             display = GetComponent<RawImage>();
             if (content == null || content.parent != transform || effectMaterial == null ||
                 content.GetComponentInChildren<Canvas>(true) != null || GetComponentInParent<Canvas>() == null ||
@@ -150,12 +176,15 @@ namespace UnscriptedEngine.UI
             captureRoot = new GameObject("Retainer Capture", typeof(RectTransform), typeof(Canvas), typeof(GraphicRaycaster));
             captureRoot.hideFlags = HideFlags.DontSave;
             captureRoot.layer = captureLayer;
+            captureRoot.AddComponent<UIRetainerCaptureOwner>().Initialize(this);
             // Keep temporary objects in the owner's scene, including additive scenes.
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(captureRoot, gameObject.scene);
             GameObject cameraObject = new GameObject("Retainer Camera", typeof(Camera));
             cameraObject.hideFlags = HideFlags.DontSave;
             UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(cameraObject, gameObject.scene);
             captureCamera = cameraObject.GetComponent<Camera>();
+            cleanupOwner = cameraObject.AddComponent<UIRetainerCaptureOwner>();
+            cleanupOwner.Initialize(this);
             captureCamera.enabled = false;
             captureCamera.orthographic = true;
             captureCamera.clearFlags = CameraClearFlags.SolidColor;
@@ -194,7 +223,7 @@ namespace UnscriptedEngine.UI
 
         private void LateUpdate()
         {
-            if (captureCamera == null) return;
+            if (captureCamera == null || cleanupPending) return;
             RectTransform rect = (RectTransform)transform;
             rect.GetWorldCorners(corners);
             Camera screenCamera = DisplayCamera;
@@ -226,9 +255,15 @@ namespace UnscriptedEngine.UI
             if (logicalSize != previousLogicalSize) { previousLogicalSize = logicalSize; RequestRefresh(); }
             captureCanvas.scaleFactor = pixelWidth / logicalWidth;
             captureCamera.orthographicSize = logicalHeight * 0.5f;
+            // UI units are world units in this capture. Tilting a wide panel can move its
+            // corners many units in depth; the old 0.1–2 range sliced through that geometry.
+            captureCamera.farClipPlane = Mathf.Max(2f, logicalWidth + logicalHeight + 2f);
+            captureCanvas.planeDistance = captureCamera.farClipPlane * 0.5f;
             materialInstance.SetFloat("_Curvature", curvature);
             Vector2 tilt = ClampPerspective(perspective);
             materialInstance.SetVector("_Perspective", new Vector4(tilt.x, tilt.y, 0f, 0f));
+            materialInstance.SetFloat("_PerspectiveFOV", perspectiveFOV);
+            materialInstance.SetFloat("_FitContent", fitContent ? 1f : 0f);
 
             bool due = refreshRequested || (refreshRate > 0f && Time.unscaledTimeAsDouble >= nextCaptureTime);
             captureCamera.enabled = due;
@@ -243,32 +278,59 @@ namespace UnscriptedEngine.UI
         {
             if (captureRoot == null) return;
             GetComponent<UIRetainerInput>().CancelInput();
+            if (captureCamera != null) captureCamera.enabled = false;
+            if (captureCanvas != null) captureCanvas.enabled = false;
+            // A captured child's OnDisable can indirectly close the original UI during shutdown.
+            // Neither source nor destination may be reparented inside that activation traversal.
+            if ((!gameObject.activeInHierarchy || !captureRoot.activeInHierarchy) && cleanupOwner != null)
+            {
+                cleanupPending = true;
+                cleanupOwner.DeferCleanup(CompleteCleanup);
+                return;
+            }
+            CompleteCleanup();
+        }
+
+        private void OnApplicationQuit() => quitting = true;
+        private void OnDestroy() => destroying = true;
+
+        private void CompleteCleanup()
+        {
+            bool restart = cleanupPending && this != null && isActiveAndEnabled && !destroying && !quitting;
+            cleanupPending = false;
+            if (cleanupOwner != null) cleanupOwner.CancelCleanup();
             if (content != null && previousParent != null)
             {
                 content.SetParent(previousParent, false);
                 content.SetSiblingIndex(previousSibling);
                 RestoreContentRect();
+                RefreshBindingOwners();
             }
             foreach (KeyValuePair<GameObject, int> entry in previousLayers)
                 if (entry.Key != null) entry.Key.layer = entry.Value;
             previousLayers.Clear();
-            captureCamera.enabled = false;
+            if (captureCamera != null) captureCamera.enabled = false;
             ReleaseTexture();
-            display.texture = previousTexture;
-            display.material = previousMaterial;
-            display.uvRect = previousUVRect;
-            Destroy(captureCamera.gameObject);
+            if (display != null)
+            {
+                display.texture = previousTexture;
+                display.material = previousMaterial;
+                display.uvRect = previousUVRect;
+            }
+            if (captureCamera != null && (cleanupOwner == null || !cleanupOwner.IsDestroying)) Destroy(captureCamera.gameObject);
             Destroy(captureRoot);
             Destroy(materialInstance);
             captureRoot = null;
             captureCamera = null;
             captureRaycaster = null;
+            cleanupOwner = null;
+            if (restart) OnEnable();
         }
 
         private void ReleaseTexture()
         {
             if (texture == null) return;
-            captureCamera.targetTexture = null;
+            if (captureCamera != null) captureCamera.targetTexture = null;
             texture.Release();
             Destroy(texture);
             texture = null;

@@ -11,7 +11,25 @@
 3. Add UI beneath its stretched `Content` child. Keep that child's anchors and offsets stretched to the panel. Change the parent panel's size to resize the group.
 4. Enter Play mode. Adjust **Curvature** and **Perspective** on `UIRetainer`. Set curvature to zero for perspective alone.
 
-The menu assigns the supplied material asset. For manual setup, add `UIRetainer` to a `RawImage`, assign its immediate content child, and assign `Integrations/UI/Retainer/RetainerWarp.mat`. This asset reference keeps the shader available in builds. Effects are visible during play; edit mode shows the original children.
+**Curvature** supports **-0.5 to 0.5** in the component, material, and code API. Negative values reverse the bend using a non-folding radial mapping, including at strong perspective; zero leaves the panel uncurved.
+
+**Fit Content** defaults on. It recenters and uniformly scales the warped capture to keep the complete original rectangle inside the panel, including negative curvature and diagonal perspective. Strong distortion can leave transparent space around the result. Disable it to use the original fixed framing and allow cropping. UI already outside the original capture rectangle still needs a larger `Content`/panel layout.
+
+**Perspective FOV** ranges from **1° to 150°**, with **60°** as baseline. Higher FOV exaggerates the configured horizontal/vertical perspective toward its vanishing point; lower FOV flattens it. Set a nonzero **Perspective** direction first. Effective perspective stops short of the projection horizon to avoid inversion. These controls update live in the editor preview without recapturing unchanged content.
+
+The menu assigns the supplied material asset. For manual setup, add `UIRetainer` to a `RawImage`, assign its immediate content child, and assign `Integrations/UI/Retainer/RetainerWarp.mat`. This asset reference keeps the shader available in builds. Scene and Game views show the effect during play; use the live preview window while authoring outside Play Mode.
+
+### Live editor preview
+
+1. Select `UIRetainer` and click **Open Live Preview** in its Inspector. Alternatively, use **Tools > UnscriptedEngine > UI > Retainer Live Preview**.
+2. Leave **Live Preview** enabled. Edit **Curvature**, **Perspective**, child graphics, text, or layout in the normal Inspector. The window stays pinned when you select children.
+3. **Use Panel Size** follows the retainer's current logical dimensions. Disable it to test another **Preview Size**, or supply a size when a standalone prefab has no resolved layout.
+
+Scene objects, Prefab Mode contents, and prefab assets can be previewed. An isolated visual copy renders at up to 10 updates per second. Warp-only changes reuse the captured texture; content changes recapture it. **Refresh** forces a new copy, including external asset changes that have not otherwise invalidated the view.
+
+The source hierarchy, renderer, layers, and prefab links are not changed. Only UI graphics and layout behaviours are enabled on the copy; app controllers, input, and runtime-generated content do not run. The preview does not replace the unwarped UI in Scene or Game views. Use Play Mode for generated screens and interaction testing.
+
+Disabling **Live Preview**, closing the window, or entering Play Mode releases its preview scene and GPU resources. Preview resumes after leaving Play Mode if the selected target still exists. Script reloads also dispose and recreate the preview safely. Values edited on the component remain ordinary Edit Mode changes and can be saved or applied to the prefab normally.
 
 Content, effect material, and capture layer changes take effect when the component is enabled. **Debug > Show Gizmos** displays the selected capture bounds and texture size.
 
@@ -20,6 +38,8 @@ Use **Resolution Scale** and **Maximum Texture Size** to control sharpness and m
 ```csharp
 retainer.Curvature = 0.08f;
 retainer.Perspective = new Vector2(0.2f, -0.1f);
+retainer.PerspectiveFOV = 100f;
+retainer.FitContent = true;
 retainer.RequestRefresh();
 ```
 
@@ -31,13 +51,17 @@ After adding, removing, or reparenting content at runtime, call `retainer.Refres
 
 During play, the component temporarily moves `Content` into its own camera canvas. A dedicated orthographic camera renders it into an ARGB32 texture with a depth/stencil buffer. The original `RawImage` displays that texture with an owned material instance. The component restores the hierarchy, original layers, material, and texture when disabled, and releases its camera and GPU resources.
 
+Closing a whole UI hierarchy defers restoration until the independent capture-camera object's next `LateUpdate`, outside Unity's activation callbacks. Rendering and pointer forwarding stop immediately. Reopening before cleanup finishes safely restarts capture after restoration.
+
+`TaggedFloatBinding` follows the capture owner's logical ancestry, preserving inherited `TaggedValueContext` and owning-canvas pawn resolution. Tagged sliders, fills, labels, and reactive effects continue receiving value changes. `RefreshContent()` also refreshes binding owners for dynamically added content. Other scripts using `GetComponentInParent` still see the temporary capture hierarchy.
+
 The input bridge maps display coordinates into texture pixels and raycasts the capture canvas. Child controls receive mapped pointer events. Selected controls still receive keyboard and controller events through the normal EventSystem. Set initial selection explicitly; automatic directional navigation across the capture boundary is unsupported. No static resources or subscriptions survive play sessions.
 
 ## 🧩 How to extend it
 
 Duplicate the effect shader and material for color changes, scanlines, or other effects that preserve coordinates. `_MainTex` contains the captured image. Display blending expects premultiplied RGB.
 
-For a different geometric warp, update both the shader's output-to-source mapping and `UIRetainerWarp.MapToSource`. Otherwise visible controls and pointer hits will disagree. The built-in component writes `_Curvature` and `_Perspective` each frame; edit those values on the component.
+For a different geometric warp, update both the shader's output-to-source mapping and `UIRetainerWarp.MapToSource`. Otherwise visible controls and pointer hits will disagree. The built-in component writes `_Curvature`, `_Perspective`, `_PerspectiveFOV`, and `_FitContent` each frame; edit those values on the component.
 
 ## ⚠️ Limitations
 

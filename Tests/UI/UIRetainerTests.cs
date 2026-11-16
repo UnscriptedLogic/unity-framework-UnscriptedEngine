@@ -1,4 +1,5 @@
 using System.Collections;
+using Framework.GameplayTag;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -21,14 +22,14 @@ namespace UnscriptedEngine.Tests
         [Test]
         public void CurvatureKeepsCenterAndClipsCorners()
         {
-            Assert.That(UIRetainerWarp.MapToSource(Vector2.one * 0.5f, 0.3f, new Vector2(0.2f, -0.1f)), Is.EqualTo(Vector2.one * 0.5f));
+            Assert.That(UIRetainerWarp.MapToSource(Vector2.one * 0.5f, 0.3f, new Vector2(0.2f, -0.1f), 60f, false), Is.EqualTo(Vector2.one * 0.5f));
             Assert.That(UIRetainerWarp.Contains(UIRetainerWarp.MapToSource(Vector2.one, 0.2f, Vector2.zero)), Is.False);
         }
 
         [Test]
         public void PerspectiveMatchesKnownProjection()
         {
-            Vector2 source = UIRetainerWarp.MapToSource(new Vector2(1f, 0.5f), 0f, new Vector2(0.25f, 0f));
+            Vector2 source = UIRetainerWarp.MapToSource(new Vector2(1f, 0.5f), 0f, new Vector2(0.25f, 0f), 60f, false);
             Assert.That(source.x, Is.EqualTo(0.9f).Within(0.00001f));
             Assert.That(source.y, Is.EqualTo(0.5f).Within(0.00001f));
         }
@@ -41,8 +42,78 @@ namespace UnscriptedEngine.Tests
             Assert.That(ShaderUtil.ShaderHasError(shader), Is.False);
         }
 
+        [TestCase(-0.5f, 150f, 0.4f, -0.4f)]
+        [TestCase(-0.5f, 60f, -0.8f, 0f)]
+        [TestCase(0f, 120f, 0.3f, 0.1f)]
+        [TestCase(0.5f, 30f, -0.2f, 0.5f)]
+        public void EntireSourceFitsAndPointerMappingReachesEveryEdge(float curvature, float fieldOfView, float horizontal, float vertical)
+        {
+            Vector2 perspective = new Vector2(horizontal, vertical);
+            Vector2 effective = UIRetainerWarp.EffectivePerspective(perspective, fieldOfView);
+            Vector3 fit = UIRetainerWarp.FitBounds(curvature, effective);
+            float bound = UIRetainerWarp.RadialBounds(curvature);
+            for (int side = 0; side < 4; side++)
+                for (int i = 0; i <= 32; i++)
+                {
+                    float along = i / 16f - 1f;
+                    Vector2 source = side == 0 ? new Vector2(-1f, along) : side == 1 ? new Vector2(1f, along) :
+                        side == 2 ? new Vector2(along, -1f) : new Vector2(along, 1f);
+                    // Independently invert radial distance to project the original source outline.
+                    float low = 0f;
+                    float high = 8f;
+                    for (int iteration = 0; iteration < 32; iteration++)
+                    {
+                        float radius = (low + high) * 0.5f;
+                        float mapped = radius * (curvature < 0f ? Mathf.Pow(1f - 4f * curvature * radius * radius, -0.25f) : 1f + curvature * radius * radius);
+                        if (mapped < source.magnitude) low = radius;
+                        else high = radius;
+                    }
+                    Vector2 radial = source.normalized * ((low + high) * 0.5f);
+                    Vector2 projected = radial / (1f - Vector2.Dot(effective, radial) / bound);
+                    Vector2 uv = ((projected - new Vector2(fit.x, fit.y)) / fit.z + Vector2.one) * 0.5f;
+                    Assert.That(UIRetainerWarp.Contains(uv), Is.True, $"Clipped source edge {source}");
+                    Vector2 sampled = UIRetainerWarp.MapToSource(uv, curvature, perspective, fieldOfView);
+                    Assert.That(Vector2.Distance(sampled, (source + Vector2.one) * 0.5f), Is.LessThan(0.001f));
+                    Vector2 projectedByApi = UIRetainerWarp.MapFromSource((source + Vector2.one) * 0.5f, curvature, perspective, fieldOfView);
+                    Assert.That(Vector2.Distance(projectedByApi, uv), Is.LessThan(0.001f));
+                }
+        }
+
         [Test]
-        public void ShaderSamplesSameCoordinatesAsPointerMapping()
+        public void WiderFovExaggeratesPerspectiveWhileStayingBeforeHorizon()
+        {
+            Vector2 perspective = new Vector2(0.2f, 0.1f);
+            Vector2 normal = UIRetainerWarp.EffectivePerspective(perspective, 60f);
+            Vector2 wide = UIRetainerWarp.EffectivePerspective(perspective, 120f);
+            Assert.That(wide.magnitude, Is.GreaterThan(normal.magnitude * 2f));
+            Vector2 extreme = UIRetainerWarp.EffectivePerspective(Vector2.one, 150f);
+            Assert.That(Mathf.Abs(extreme.x) + Mathf.Abs(extreme.y), Is.LessThan(1f));
+        }
+
+        [TestCase(-0.5f, 0.8f, 0f)]
+        [TestCase(-0.5f, -0.4f, 0.4f)]
+        [TestCase(-0.25f, 0f, -0.8f)]
+        public void NegativeCurvatureDoesNotFold(float curvature, float horizontal, float vertical)
+        {
+            Vector2 perspective = new Vector2(horizontal, vertical);
+            const float step = 0.0001f;
+            for (int y = 0; y <= 20; y++)
+                for (int x = 0; x <= 20; x++)
+                {
+                    Vector2 uv = new Vector2(x / 20f, y / 20f);
+                    Vector2 point = UIRetainerWarp.MapToSource(uv, curvature, perspective, 60f, false);
+                    Vector2 dx = UIRetainerWarp.MapToSource(uv + Vector2.right * step, curvature, perspective, 60f, false) - point;
+                    Vector2 dy = UIRetainerWarp.MapToSource(uv + Vector2.up * step, curvature, perspective, 60f, false) - point;
+                    Assert.That(dx.x * dy.y - dx.y * dy.x, Is.GreaterThan(0f), $"Fold at {uv}");
+                }
+        }
+
+        [TestCase(0.12f, 60f)]
+        [TestCase(-0.12f, 60f)]
+        [TestCase(-0.5f, 60f)]
+        [TestCase(-0.5f, 120f)]
+        [TestCase(0.5f, 150f)]
+        public void ShaderSamplesSameCoordinatesAsPointerMapping(float curvature, float fieldOfView)
         {
             Texture2D source = new Texture2D(64, 64, TextureFormat.RGBA32, false, true);
             RenderTexture target = new RenderTexture(64, 64, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
@@ -56,7 +127,8 @@ namespace UnscriptedEngine.Tests
                         source.SetPixel(x, y, new Color((x + 0.5f) / 64f, (y + 0.5f) / 64f, 0f, 1f));
                 source.Apply();
                 source.wrapMode = TextureWrapMode.Clamp;
-                material.SetFloat("_Curvature", 0.12f);
+                material.SetFloat("_Curvature", curvature);
+                material.SetFloat("_PerspectiveFOV", fieldOfView);
                 material.SetVector("_Perspective", new Vector4(0.2f, -0.1f, 0f, 0f));
                 target.Create();
                 RenderTexture.active = target;
@@ -65,11 +137,20 @@ namespace UnscriptedEngine.Tests
                 RenderTexture.active = target;
                 readback.ReadPixels(new Rect(0, 0, 64, 64), 0, 0);
                 readback.Apply();
-                Vector2 expected = UIRetainerWarp.MapToSource(new Vector2(48.5f / 64f, 32.5f / 64f), 0.12f, new Vector2(0.2f, -0.1f));
-                Color actual = readback.GetPixel(48, 32);
-                Assert.That(actual.r, Is.EqualTo(expected.x).Within(0.025f));
-                Assert.That(actual.g, Is.EqualTo(expected.y).Within(0.025f));
-                Assert.That(readback.GetPixel(0, 0).a, Is.EqualTo(0f).Within(0.01f));
+                int visibleSamples = 0;
+                for (int y = 0; y < 64; y += 3)
+                    for (int x = 0; x < 64; x += 3)
+                    {
+                        Vector2 expected = UIRetainerWarp.MapToSource(new Vector2((x + 0.5f) / 64f, (y + 0.5f) / 64f), curvature, new Vector2(0.2f, -0.1f), fieldOfView);
+                        Color actual = readback.GetPixel(x, y);
+                        bool visible = UIRetainerWarp.Contains(expected);
+                        Assert.That(actual.a, Is.EqualTo(visible ? 1f : 0f).Within(0.01f), $"Alpha at {x}, {y}");
+                        if (!visible) continue;
+                        visibleSamples++;
+                        Assert.That(actual.r, Is.EqualTo(expected.x).Within(0.025f));
+                        Assert.That(actual.g, Is.EqualTo(expected.y).Within(0.025f));
+                    }
+                Assert.That(visibleSamples, Is.GreaterThan(0));
             }
             finally
             {
@@ -91,9 +172,15 @@ namespace UnscriptedEngine.Tests
             GameObject canvasObject = new GameObject("Retainer Test Canvas", typeof(Canvas), typeof(GraphicRaycaster));
             GameObject events = new GameObject("Retainer Test Events", typeof(EventSystem));
             Material material = new Material(Shader.Find("UnscriptedEngine/UI/Retainer Warp"));
+            GameObject actor = new GameObject("Tagged actor");
+            GameplayTag health = ScriptableObject.CreateInstance<GameplayTag>();
+            JsonUtility.FromJsonOverwrite("{\"path\":\"Stats.Health\"}", health);
+            TaggedFloatValue value = actor.AddComponent<TaggedFloatValue>();
+            value.Tags.Add(health);
             try
             {
                 canvasObject.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
+                canvasObject.AddComponent<TaggedValueContext>().SetSource(actor);
                 GameObject panel = new GameObject("Panel", typeof(RectTransform), typeof(RawImage));
                 panel.SetActive(false);
                 panel.transform.SetParent(canvasObject.transform, false);
@@ -123,7 +210,14 @@ namespace UnscriptedEngine.Tests
                 handleObject.transform.SetParent(sliderObject.transform, false);
                 Slider slider = sliderObject.GetComponent<Slider>();
                 slider.handleRect = (RectTransform)handleObject.transform;
+                TaggedFloatBinding binding = sliderObject.AddComponent<TaggedFloatBinding>();
+                binding.ValueTag = health;
+                TaggedFloatDisplay taggedDisplay = sliderObject.AddComponent<TaggedFloatDisplay>();
+                SerializedObject displaySettings = new SerializedObject(taggedDisplay);
+                displaySettings.FindProperty("slider").objectReferenceValue = slider;
+                displaySettings.ApplyModifiedPropertiesWithoutUndo();
                 UIRetainer retainer = panel.AddComponent<UIRetainer>();
+                retainer.FitContent = false; // This fixture uses known, unfitted pointer coordinates.
                 SerializedObject settings = new SerializedObject(retainer);
                 settings.FindProperty("content").objectReferenceValue = content;
                 settings.FindProperty("effectMaterial").objectReferenceValue = material;
@@ -148,6 +242,10 @@ namespace UnscriptedEngine.Tests
                 Object.Destroy(sample);
                 Assert.That(alpha, Is.EqualTo(0.5f).Within(0.03f), "Capture must preserve translucent UI alpha.");
                 Assert.That(content.parent, Is.Not.EqualTo(panel.transform));
+                Assert.That(binding.Source, Is.SameAs(value), "Capture must preserve inherited tagged-value context.");
+                value.SetValue(25f);
+                Assert.That(slider.value, Is.EqualTo(0.25f).Within(0.001f));
+                value.SetValue(0f); // Keep the drag fixture's initial handle position unchanged.
                 Vector2 screen = RectTransformUtility.WorldToScreenPoint(null, panel.transform.TransformPoint(new Vector3(100f, 0f)));
                 PointerEventData pointer = new PointerEventData(events.GetComponent<EventSystem>())
                 { position = screen, button = PointerEventData.InputButton.Left, pointerId = -1, eligibleForClick = true };
@@ -183,6 +281,22 @@ namespace UnscriptedEngine.Tests
                 retainer.enabled = true;
                 yield return null;
                 Assert.That(retainer.Texture, Is.Not.Null);
+                value.SetValue(60f);
+                Assert.That(slider.value, Is.EqualTo(0.6f).Within(0.001f));
+                // Reproduce closing the source UI from a child's capture-root deactivation callback.
+                RetainerDeactivateProbe probe = contentObject.AddComponent<RetainerDeactivateProbe>();
+                probe.Target = panel;
+                retainer.CaptureRaycaster.gameObject.SetActive(false);
+                yield return null;
+                yield return null;
+                Assert.That(content.parent, Is.EqualTo(panel.transform));
+                Assert.That(retainer.Texture, Is.Null);
+                probe.Target = null;
+                panel.SetActive(true);
+                yield return null;
+                value.SetValue(40f);
+                Assert.That(binding.Source, Is.SameAs(value));
+                Assert.That(slider.value, Is.EqualTo(0.4f).Within(0.001f));
                 retainer.enabled = false;
             }
             finally
@@ -190,6 +304,8 @@ namespace UnscriptedEngine.Tests
                 Object.Destroy(canvasObject);
                 Object.Destroy(events);
                 Object.Destroy(material);
+                Object.Destroy(actor);
+                Object.Destroy(health);
             }
             yield return null;
             yield return new ExitPlayMode();

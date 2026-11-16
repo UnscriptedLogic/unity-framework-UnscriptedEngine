@@ -53,11 +53,17 @@ namespace UnscriptedEngine.UI
         public void SetSource(GameObject root) { sourceRoot = root; Rebind(); }
         protected virtual void OnEnable() { CacheOwners(); Rebind(); }
         protected virtual void OnDisable() { Unsubscribe(); resolvedRoot = null; Publish(); }
-        protected virtual void OnTransformParentChanged() { CacheOwners(); Rebind(); }
+        protected virtual void OnTransformParentChanged() => RefreshOwner();
+        /// <summary>Refresh inherited context after moving an ancestor or changing capture ownership.</summary>
+        public void RefreshOwner()
+        {
+            CacheOwners();
+            if (isActiveAndEnabled) Rebind();
+        }
         private void CacheOwners()
         {
-            context = GetComponentInParent<TaggedValueContext>(true);
-            canvas = GetComponentInParent<UCanvasComponent>(true);
+            context = UIRetainerCaptureOwner.FindLogicalParent<TaggedValueContext>(this);
+            canvas = UIRetainerCaptureOwner.FindLogicalParent<UCanvasComponent>(this);
         }
         private GameObject ResolveRoot()
         {
