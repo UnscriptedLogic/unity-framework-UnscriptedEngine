@@ -1,6 +1,6 @@
 # Chest creator
 
-Open **Tools > UnscriptedEngine > Inventory > Create Chest**. Requires the uGUI integration.
+Open **Tools > UnscriptedEngine > Gameplay > Items > Create Chest**. Requires the uGUI integration.
 
 1. Enter chest **Name** and **Prototype** (script namespace). Select **Output folder** by dragging a Project folder into the field, using its picker, or clicking **Browse folder...**, matching scene/controller setup.
 2. Enable **Extend Script** for an attached subclass of `UChest`; leave disabled to use the base directly.

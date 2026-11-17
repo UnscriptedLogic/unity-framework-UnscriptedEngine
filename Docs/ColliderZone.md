@@ -13,6 +13,16 @@
 
 The default filter accepts every layer and requires no tags. Require Any needs one match; Require All needs every match. Reject Any rejects one match; Reject All rejects only the full combination. Empty lists disable their condition. All four conditions combine, with rejection taking precedence. A child tag also matches its authored parent tags. The nearest `GameplayTags` owner is used; owners are not merged.
 
+## Configure Wand
+
+The creator's **Configure Wand** option adds `ConfigurableObject` (and its required `NetworkObject`) to new zones. For existing zones, click **Enable Configure Wand** in the ColliderZone inspector before entering Play Mode. Author these components before spawning network prefabs, and register network prefabs normally when spawning online.
+
+The wand detects both trigger and solid colliders on marked zones. Solid foreground geometry blocks inspection; unmarked triggers remain transparent. Supported serialized fields on the zone and its other MonoBehaviours use the normal configuration controls, host authority, undo/reset, and Save to Editor workflow. Narrow exposure using ConfigurableObject's Components list.
+
+Exposed settings include debug visibility/flash duration, filter layers and tag conditions, effect timing, force strength/direction/line of sight, obstruction layers, and each existing damage value operation's tag, operation, and amount. Layer masks use integer bitmasks (`-1` for all layers, `1 << layerIndex` for one layer). Tag references use their authored paths; tag conditions accept comma-separated paths and an empty value clears the condition. Unknown paths are rejected. Editor sessions can resolve project tag assets; player builds need those tags already loaded, for example through an authored GameplayTagDatabase reference.
+
+Nested serialized objects and existing list/array entries are flattened into grouped controls (up to eight nesting levels and 128 entries per collection). Collection sizes are not editable; author damage operation entries before Play Mode. Native collider geometry belongs to Transform Wand and is not exposed here. UnityEvent wiring, Transform references (such as Source Plane), and non-tag asset references (such as StatusZone's shared Effect definition) remain unsupported. Shared status definition assets are never edited through the zone.
+
 ## How it works
 
 Use one collider on each zone GameObject. `isTrigger` selects trigger or collision behavior. Each contacting collider has its own Enter/Stay/Exit lifecycle, so a character with several colliders can produce several entries. Layers are read from the contacting collider, not its parent.

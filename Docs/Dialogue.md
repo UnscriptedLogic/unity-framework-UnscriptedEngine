@@ -4,7 +4,7 @@ Dialogue assets and sessions live in `UnscriptedEngine.Dialogue` without UI depe
 
 ## Try the example
 
-Use **Tools > UnscriptedEngine > Dialogue > Create Demo** in an empty scene, then enter Play Mode. The example creates a camera if needed, an NPC, input/event system if needed, and three buttons for bottom-panel dialogue, world bubbles, and timed chatter. Continue first reveals the complete text, then advances. Both interactive views use the same branching asset. Switching modes cancels the previous conversation.
+Use **Tools > UnscriptedEngine > Gameplay > Dialogue > Create Demo** in an empty scene, then enter Play Mode. The example creates a camera if needed, an NPC, input/event system if needed, and three buttons for bottom-panel dialogue, world bubbles, and timed chatter. Continue first reveals the complete text, then advances. Both interactive views use the same branching asset. Switching modes cancels the previous conversation.
 
 Demo scripts are under `Assets/Prototypes/Default/Experiments/Gameplay/Dialogue`, in their own namespace and assemblies. All generated objects and transient dialogue assets are cleaned up with the demo. Import TMP Essential Resources if the project has no default TMP font.
 
@@ -12,7 +12,7 @@ Demo scripts are under `Assets/Prototypes/Default/Experiments/Gameplay/Dialogue`
 
 ### Overhead greetings on an existing pawn
 
-Select a scene pawn (or open its prefab in Prefab Mode), then choose **Tools > UnscriptedEngine > Dialogue > Create Overhead Speech Bubble**. Set the greeting and optional head anchor, click **Create and Wire Speech Bubble**, and choose a new conversation asset path.
+Select a scene pawn (or open its prefab in Prefab Mode), then choose **Tools > UnscriptedEngine > Gameplay > Dialogue > Create Overhead Speech Bubble**. Set the greeting and optional head anchor, click **Create and Wire Speech Bubble**, and choose a new conversation asset path.
 
 The tool creates a world-space bubble with a name label, text, and tail; a timed `DialogueRunner`; and a concrete `SpeechBubbleInteraction` component on the pawn. It reuses existing `UInteractableComponent` and `DialogueSpeaker` components. Without an existing or explicitly assigned anchor it places a new anchor above the pawn's renderer bounds. Edit the anchor Transform to adjust placement. Edit the bubble RectTransform/scale, colors and TMP settings to change appearance. The presenter and runner stay enabled; the content child starts hidden.
 

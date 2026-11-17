@@ -22,6 +22,45 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void FourComponentSettingsValidatePersistResetAndReplicate()
+        {
+            SettingDefinition[] definitions = {
+                Setting.Vector4("test.vector4", Vector4.zero, "Vector", "Test"),
+                Setting.Quaternion("test.rotation", Quaternion.identity, "Rotation", "Test"),
+                Setting.Color("test.color", Color.white, "Color", "Test")
+            };
+            object[] values = { new Vector4(1f, 2f, 3f, 4f), new Quaternion(.1f, .2f, .3f, .4f), new Color(2f, -.5f, .25f, .75f) };
+            object[] invalid = { new Vector4(0f, 0f, 0f, float.NaN), new Quaternion(0f, float.PositiveInfinity, 0f, 1f), new Color(0f, 0f, float.NegativeInfinity, 1f) };
+            SettingsService service = new SettingsService();
+            using IDisposable registration = Register(service, definitions);
+            for (int index = 0; index < definitions.Length; index++)
+            {
+                Assert.IsTrue(service.TrySet(definitions[index], values[index]));
+                Assert.IsFalse(service.TrySet(definitions[index], invalid[index]));
+                Assert.IsFalse(service.TrySet(definitions[index], "wrong type"));
+                Assert.AreEqual(values[index], service.Get(definitions[index]));
+            }
+            SettingsService restored = new SettingsService();
+            restored.LoadPreferences(JsonUtility.FromJson<SettingsPreferences>(JsonUtility.ToJson(service.ExportPreferences())));
+            using IDisposable restoredRegistration = Register(restored, definitions);
+            for (int index = 0; index < definitions.Length; index++)
+            {
+                Assert.AreEqual(values[index], restored.Get(definitions[index]));
+                Assert.IsTrue(restored.Reset(definitions[index]));
+                Assert.AreEqual(definitions[index].DefaultObject, restored.Get(definitions[index]));
+            }
+            Assert.Throws<ArgumentException>(() => Setting.Vector4("bad.vector", new Vector4(0, 0, 0, float.NaN), "Bad", "Test"));
+            Assert.Throws<ArgumentException>(() => Setting.Quaternion("bad.rotation", new Quaternion(0, 0, 0, float.NaN), "Bad", "Test"));
+            Assert.Throws<ArgumentException>(() => Setting.Color("bad.color", new Color(0, 0, 0, float.NaN), "Bad", "Test"));
+            Setting<Quaternion> serverRotation = Setting.Quaternion("server.rotation", Quaternion.identity, "Rotation", "Test", scope: SettingScope.ServerSession);
+            SettingsService client = new SettingsService(SettingsRole.Client);
+            using IDisposable clientRegistration = Register(client, serverRotation);
+            Assert.IsFalse(client.TrySet(serverRotation, (Quaternion)values[1]));
+            Assert.IsTrue(client.ApplyServerValue(serverRotation, (Quaternion)values[1]));
+            Assert.AreEqual(values[1], client.Get(serverRotation));
+        }
+
+        [Test]
         public void ReadsAndSubscriptionsDoNotActivateCatalogs()
         {
             SettingsService service = new SettingsService();

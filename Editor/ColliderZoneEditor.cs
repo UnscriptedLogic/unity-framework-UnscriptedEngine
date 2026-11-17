@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using UnscriptedEngine.Configuration;
 using UnscriptedEngine.Gameplay;
 
 namespace UnscriptedEngine.Editor
@@ -11,6 +12,16 @@ namespace UnscriptedEngine.Editor
         public override void OnInspectorGUI()
         {
             DrawDefaultInspector();
+            using (new EditorGUI.DisabledScope(EditorApplication.isPlayingOrWillChangePlaymode))
+            {
+                if (GUILayout.Button("Enable Configure Wand"))
+                    foreach (Object selected in targets)
+                    {
+                        ColliderZone zone = (ColliderZone)selected;
+                        if (zone.GetComponent<ConfigurableObject>() == null)
+                            Undo.AddComponent<ConfigurableObject>(zone.gameObject);
+                    }
+            }
             foreach (Object selected in targets)
             {
                 ColliderZone zone = (ColliderZone)selected;

@@ -5,7 +5,7 @@ using UnscriptedEngine.Settings;
 
 namespace UnscriptedEngine.UI.Settings
 {
-    public enum SettingWidgetKind { Boolean, Float, Integer, Text, Choice, Custom }
+    public enum SettingWidgetKind { Boolean, Float, Integer, Text, Choice, Custom, Vector2, Vector3, Vector4, Quaternion, Color }
 
     [CreateAssetMenu(menuName = "Unscripted Engine/Settings/UI Theme")]
     public sealed class SettingsTheme : ScriptableObject
@@ -67,6 +67,11 @@ namespace UnscriptedEngine.UI.Settings
             if (definition is IntSettingDefinition) return SettingWidgetKind.Integer;
             if (definition is StringSettingDefinition text)
                 return text.Choices.Count > 0 ? SettingWidgetKind.Choice : SettingWidgetKind.Text;
+            if (definition is Vector2SettingDefinition) return SettingWidgetKind.Vector2;
+            if (definition is Vector3SettingDefinition) return SettingWidgetKind.Vector3;
+            if (definition is Vector4SettingDefinition) return SettingWidgetKind.Vector4;
+            if (definition is QuaternionSettingDefinition) return SettingWidgetKind.Quaternion;
+            if (definition is ColorSettingDefinition) return SettingWidgetKind.Color;
             return SettingWidgetKind.Custom;
         }
     }

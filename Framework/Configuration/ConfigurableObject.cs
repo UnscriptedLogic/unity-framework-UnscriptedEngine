@@ -50,6 +50,23 @@ namespace UnscriptedEngine.Configuration
         public bool InRange(Transform observer, float range) => observer != null && range > 0f
             && (observer.position - transform.position).sqrMagnitude <= range * range;
 
+        /// <summary>Find the nearest inspectable surface. Unmarked triggers are transparent; solid geometry blocks inspection.</summary>
+        public static ConfigurableObject RaycastTarget(Ray ray, float range, Transform ignoredHierarchy = null)
+        {
+            ConfigurableObject nearest = null;
+            float distance = float.PositiveInfinity;
+            foreach (RaycastHit hit in Physics.RaycastAll(ray, range, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
+            {
+                if (ignoredHierarchy != null && hit.transform.IsChildOf(ignoredHierarchy) || hit.distance >= distance) continue;
+                ConfigurableObject candidate = hit.collider.GetComponentInParent<ConfigurableObject>();
+                bool canInspect = candidate != null && candidate.isActiveAndEnabled;
+                if (hit.collider.isTrigger && !canInspect) continue;
+                distance = hit.distance;
+                nearest = canInspect ? candidate : null;
+            }
+            return nearest;
+        }
+
         public bool TrySet(string fieldId, object value, Transform observer, float range)
         {
             LastError = "Configuration requires the host, an active target, and an observer in range.";

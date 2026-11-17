@@ -11,7 +11,7 @@ namespace UnscriptedEngine.UI.Editor
         protected override string Heading => "UI setup";
         protected override string DefaultOutputFolder => "Assets/GameAssets/Prefabs/UI";
 
-        [MenuItem("Tools/UnscriptedEngine/Create UI...")]
+        [MenuItem("Tools/UnscriptedEngine/UI/Create UI...")]
         public static void Open() { GetWindow<UIScaffoldWindow>("UI Setup"); }
 
         protected override void DrawOptions(ScaffoldPlan plan)

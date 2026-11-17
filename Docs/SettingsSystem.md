@@ -95,6 +95,11 @@ Add more members to an existing catalog or create another catalog and provider. 
 - `Setting.Float` and `Setting.Int` for bounded numbers.
 - `Setting.Text` for limited-length strings.
 - `Setting.Choice` for fixed string choices.
+- `Setting.Vector2`, `Setting.Vector3`, and `Setting.Vector4` for finite vector components.
+- `Setting.Quaternion` for finite XYZW components, preserved without automatic normalization.
+- `Setting.Color` for finite RGBA components, including HDR values without clamping.
+
+Component types support persistence, replication, reset, and built-in component input fields.
 
 Factories accept optional `description`, `scope`, `editorHint`, `advanced`, and `order` metadata. Group paths use `/`, such as `"Gameplay/Camera"`. C# nesting and UI grouping are independent.
 
@@ -112,7 +117,7 @@ Clients cannot write `ServerSession` settings, and the bridge has no client-to-s
 
 - Definition references do not register settings; providers control activation, UI visibility, and write eligibility.
 - IDs must remain stable. Renaming one requires migrating saved preferences; choice values are stored as strings, not indices.
-- Built-in definitions cover Boolean, bounded numeric, text, and fixed-choice values. Cross-setting dependencies, apply/cancel transactions, restart policies, and graphics rollback are not built in.
+- Built-in definitions cover Boolean, bounded numeric, text, fixed-choice, vector, quaternion, and color values. Cross-setting dependencies, apply/cancel transactions, restart policies, and graphics rollback are not built in.
 - Settings UI uses legacy uGUI controls. Localization, key binding, and larger-scale list virtualization require custom UI work.
 - The basic network bridge has no batching, client-admin request flow, or snapshot-ready event. Custom transport code must authenticate server values before applying them.
 

@@ -37,5 +37,40 @@ namespace UnscriptedEngine.Settings
         {
             return new StringSettingDefinition(id, defaultValue, label, group, 256, choices, description, scope, editorHint, advanced, order);
         }
+
+        public static Setting<UnityEngine.Vector2> Vector2(string id, UnityEngine.Vector2 defaultValue,
+            string label, string group, string description = "", SettingScope scope = SettingScope.LocalUser,
+            string editorHint = "", bool advanced = false, int order = 0)
+        {
+            return new Vector2SettingDefinition(id, defaultValue, label, group, description, scope, editorHint, advanced, order);
+        }
+
+        public static Setting<UnityEngine.Vector3> Vector3(string id, UnityEngine.Vector3 defaultValue,
+            string label, string group, string description = "", SettingScope scope = SettingScope.LocalUser,
+            string editorHint = "", bool advanced = false, int order = 0)
+        {
+            return new Vector3SettingDefinition(id, defaultValue, label, group, description, scope, editorHint, advanced, order);
+        }
+        public static Setting<UnityEngine.Vector4> Vector4(string id, UnityEngine.Vector4 defaultValue,
+            string label, string group, string description = "", SettingScope scope = SettingScope.LocalUser,
+            string editorHint = "", bool advanced = false, int order = 0)
+        {
+            return new Vector4SettingDefinition(id, defaultValue, label, group, description, scope, editorHint, advanced, order);
+        }
+
+        public static Setting<UnityEngine.Quaternion> Quaternion(string id, UnityEngine.Quaternion defaultValue,
+            string label, string group, string description = "", SettingScope scope = SettingScope.LocalUser,
+            string editorHint = "", bool advanced = false, int order = 0)
+        {
+            return new QuaternionSettingDefinition(id, defaultValue, label, group, description, scope, editorHint, advanced, order);
+        }
+
+        public static Setting<UnityEngine.Color> Color(string id, UnityEngine.Color defaultValue,
+            string label, string group, string description = "", SettingScope scope = SettingScope.LocalUser,
+            string editorHint = "", bool advanced = false, int order = 0)
+        {
+            return new ColorSettingDefinition(id, defaultValue, label, group, description, scope, editorHint, advanced, order);
+        }
+
     }
 }

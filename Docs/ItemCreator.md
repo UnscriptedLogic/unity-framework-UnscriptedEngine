@@ -1,6 +1,6 @@
 # Item creator
 
-Open **Tools > UnscriptedEngine > Gameplay > Items**. Choose an existing root folder
+Open **Tools > UnscriptedEngine > Gameplay > Items > Create Item...**. Choose an existing root folder
 inside Assets, enter an item name, and click **Create Item** once. Missing child folders
 are created. Display name, stack capacity, and world pickup quantity are optional settings.
 Item names must start with a letter and contain only letters, digits, or underscores.

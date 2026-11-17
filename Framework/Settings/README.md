@@ -292,3 +292,8 @@ For another transport, authenticate server messages before calling ApplyServerVa
 ## Validation
 
 Run SettingsServiceTests and SettingsWidgetTests in Unity's Edit Mode test runner. UI tests enter Play Mode. Coverage includes nested catalog discovery, default-only reads, duplicate IDs, shared categories, range/type validation, legacy JSON payloads, resets, role restrictions, real additive scene unloads, override restoration, widget subscriptions, search, and advanced filtering.
+
+## Vector settings
+
+Use Setting.Vector2(id, defaultValue, label, group) or Setting.Vector3(id, defaultValue, label, group), passing a UnityEngine vector as the default. Both accept standard metadata options. Typed reads, writes, observations, reset, JSON persistence and server synchronization support vectors. All components must be finite; NaN and infinity are rejected, including defaults. Vectors have no component bounds. Generated controls provide labeled X/Y/Z inputs with invariant-culture numbers and restore current values after invalid edits. Themes support Vector2 and Vector3 widget kinds.
+

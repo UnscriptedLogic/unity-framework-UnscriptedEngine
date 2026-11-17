@@ -13,7 +13,12 @@ namespace UnscriptedEngine.Tests
         public string Text = "hello";
         [HideInInspector] public bool Hidden;
         [NonSerialized] public bool Transient;
-        public Vector3 Unsupported;
+        public Vector2 Position2 = new Vector2(1f, 2f);
+        public Vector3 Position3 = new Vector3(1f, 2f, 3f);
+        public Vector4 Position4 = new Vector4(1f, 2f, 3f, 4f);
+        public Quaternion Rotation = Quaternion.identity;
+        public Color Tint = Color.white;
+        public AnimationCurve Unsupported;
         public int Count => count;
     }
 }

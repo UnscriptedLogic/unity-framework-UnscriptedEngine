@@ -2,6 +2,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnscriptedEngine.Gameplay;
+using UnscriptedEngine.Configuration;
 
 namespace UnscriptedEngine.Editor
 {
@@ -13,6 +14,7 @@ namespace UnscriptedEngine.Editor
         private ZoneShape zoneShape;
         private string zoneName = "Collider Zone";
         private bool isTrigger = true;
+        private bool configurable = true;
         private bool addRigidbody = true;
         private bool placeAtViewCenter = true;
         private float placementDistance = 10f;
@@ -102,6 +104,7 @@ namespace UnscriptedEngine.Editor
                 placementDistance = Mathf.Max(0.01f, EditorGUILayout.FloatField(new GUIContent("Empty Space Distance", "Distance ahead of the Scene view camera when no collider is hit."), placementDistance));
             zoneShape = (ZoneShape)EditorGUILayout.EnumPopup("Shape", zoneShape);
             isTrigger = EditorGUILayout.Toggle("Is Trigger", isTrigger);
+            configurable = EditorGUILayout.Toggle(new GUIContent("Configure Wand", "Adds ConfigurableObject and NetworkObject so the wand can inspect supported zone behavior fields."), configurable);
             addRigidbody = EditorGUILayout.Toggle(new GUIContent("Kinematic Rigidbody", "Makes trigger callbacks work against static colliders. Collision zones still need a dynamic body on one side."), addRigidbody);
             if (!isTrigger)
                 EditorGUILayout.HelpBox("Solid zones support framework CharacterMovementComponent hits automatically. Other CharacterController movers must forward OnControllerColliderHit with ColliderZone.ForwardControllerHit(hit). Ordinary Rigidbody collisions need a dynamic body on one side.", MessageType.Info);
@@ -190,6 +193,7 @@ namespace UnscriptedEngine.Editor
             }
             ColliderZone zone = Undo.AddComponent<ColliderZone>(zoneObject);
             EditorUtility.CopySerialized(template, zone);
+            if (configurable) Undo.AddComponent<ConfigurableObject>(zoneObject);
             if (zoneKind == ZoneKind.Damage)
                 EditorUtility.CopySerialized(damageTemplate, Undo.AddComponent<DamageZone>(zoneObject));
             if (zoneKind == ZoneKind.Status)

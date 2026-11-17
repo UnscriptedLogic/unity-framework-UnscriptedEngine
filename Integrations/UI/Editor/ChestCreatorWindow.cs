@@ -42,7 +42,7 @@ namespace UnscriptedEngine.UI.Editor
         private ChestLootProvider customProvider;
         private Vector2 scroll;
 
-        [MenuItem("Tools/UnscriptedEngine/Inventory/Create Chest")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Items/Create Chest")]
         public static void ShowWindow()
         {
             ChestCreatorWindow window = GetWindow<ChestCreatorWindow>("Create Chest");

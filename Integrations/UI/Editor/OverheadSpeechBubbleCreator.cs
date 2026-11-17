@@ -22,7 +22,7 @@ namespace UnscriptedEngine.UI.Editor
         [Tooltip("Initial greeting. Additional lines can be authored in the generated conversation asset.")]
         private string greeting = "Welcome! Take a look at my wares.";
 
-        [MenuItem("Tools/UnscriptedEngine/Dialogue/Create Overhead Speech Bubble")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Dialogue/Create Overhead Speech Bubble")]
         public static void ShowWindow()
         {
             OverheadSpeechBubbleCreator window = GetWindow<OverheadSpeechBubbleCreator>("Overhead Speech Bubble");

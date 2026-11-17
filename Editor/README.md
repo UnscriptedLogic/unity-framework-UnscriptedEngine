@@ -1,6 +1,42 @@
 # Scene and player scaffolding
 
-Use **Tools > UnscriptedEngine > Create Controller and Pawn...** to enter a name,
+Open **Tools > UnscriptedEngine > Materials > Compact Materials** (also **Assets > Compact Materials...**)
+to scan a folder or selected materials/models/folders. Matching groups compare every serialized
+material setting; same-name matching is enabled by default. Choose the material to keep in each group,
+or enable manual replacement and pick a target material regardless of appearance.
+
+Applying replaces saved Unity YAML object references throughout `Assets`, including scene/prefab
+references and model importer remaps. The scan folder limits candidates, not reference replacement.
+Save open scenes and close Prefab Mode first; scenes reload after editing. Original changed files
+are backed up under `Library/CompactMaterials`. There is no Unity Undo. Binary model data and package
+assets are not rewritten. Embedded materials remain in their source models.
+
+Source materials are kept by default. Optional cleanup moves standalone `.mat` sources to Trash
+only when no remaining asset dependencies reference their paths. Cleanup cannot detect name-based
+Resources/Addressables loads or consumers outside `Assets`; review those uses before enabling it.
+Restore backed-up files and their metadata to their original paths to revert changes.
+
+Open **Tools > UnscriptedEngine > Favourites** for a dockable folder/prefab shortcut tab.
+Drag Project folders or prefab assets into the window, or use **Add Selected**. Click an entry
+to select and ping it; double-click a prefab to open it. Entries can be dragged into the Scene
+or Inspector. Search filters names and paths; the remove button only removes the shortcut.
+Favourites are personal to this project, saved under `UserSettings/UnscriptedEngineFavourites.asset`,
+and tracked by GUID so asset renames and moves retain their shortcuts.
+
+Select standalone `.mat` assets in the Project window, then right-click **Rename Selected Materials...**
+to preview batch renaming. Also available under **Tools > UnscriptedEngine > Materials > Rename Selected Materials...**.
+The window applies case-sensitive find/replace, optionally capitalizes the first letter, then adds
+prefix/suffix. Existing paths and duplicate destinations block renaming. Embedded/package materials
+are excluded; asset GUIDs and references are preserved. Renaming does not support Unity Undo.
+
+Use **Tools > UnscriptedEngine > Gameplay > Create Interactable Cube** for a one-metre cube
+at the Scene view pivot (or the origin without a Scene view). It includes a BoxCollider,
+NetworkObject, UInteractableComponent, and InteractionPromptInfo. Creation supports Undo.
+Wire the interactable's Inspector events to the desired behavior; the player must already
+have framework interaction configured. Scene-placed cubes use the existing Netcode scene
+workflow; runtime-spawned prefab copies must be registered with the NetworkManager.
+
+Use **Tools > UnscriptedEngine > Gameplay > Create Controller and Pawn...** to enter a name,
 choose an existing folder under `Assets`, and select a template. The blank template
 creates `Scripts/C_Name.cs`, `Scripts/P_Name.cs`, matching networked prefabs, and `PD_Name.asset`.
 Scripts go in a `Scripts` subfolder, scenes in a `Scenes` subfolder, and player prefabs
@@ -68,7 +104,7 @@ names alone do not change matching behavior. The picker does not rename existing
 
 ## UI setup
 
-Use **Tools > UnscriptedEngine > Create UI...**, enter a name, choose a root output
+Use **Tools > UnscriptedEngine > UI > Create UI...**, enter a name, choose a root output
 folder, and select `UCanvasComponent` or `UWidgetComponent`.
 
 | Extension | Script | Prefab |

@@ -16,7 +16,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         [SerializeField] private GameObject modelOverride;
         private Vector2 scroll;
 
-        [MenuItem("Tools/UnscriptedEngine/Gameplay/Items")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Items/Create Item...")]
         public static void Open() => GetWindow<ItemScaffoldWindow>("Create Item");
 
         private void OnEnable()

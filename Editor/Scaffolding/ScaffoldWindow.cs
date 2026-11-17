@@ -110,7 +110,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         private Type[] templates;
         protected override bool GeneratesScene => false;
 
-        [MenuItem("Tools/UnscriptedEngine/Create Controller and Pawn...")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Create Controller and Pawn...")]
         public static void Open() { GetWindow<PlayerScaffoldWindow>("Player Setup"); }
 
         protected override void OnEnable()
