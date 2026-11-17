@@ -6,7 +6,7 @@
 
 ## How to use it
 
-1. Open **Tools > UnscriptedEngine > Gameplay > Collider Zones**.
+1. Open **Tools > UnscriptedEngine > Gameplay > Zones > Collider Zones**.
 2. Choose Box, Sphere, or Capsule; configure dimensions, filters, and events; click **Create Collider Zone**. The open prefab stage takes precedence over the scene. A selected object in that stage becomes the parent.
 3. Add `GameplayTags` to the player or its collider's parent when using tag filters. These are framework GameplayTag assets, not Unity's single GameObject tag.
 4. Wire Entered, Stayed, and Exited in the Inspector. Dynamic listeners receive the contacting collider. Code can use `zone.Entered.AddListener(OnEntered)` and remove the same listener during cleanup.

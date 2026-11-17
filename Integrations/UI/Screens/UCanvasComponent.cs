@@ -20,6 +20,8 @@ namespace UnscriptedEngine.UI
         public virtual CanvasInputPolicy InputPolicy => inputPolicy;
         public bool IsFocused { get; private set; }
         public virtual bool Dismissible => true;
+        /// <summary>World-space modals can keep focus without an overlay raycaster covering their controls.</summary>
+        public virtual bool BlocksBackgroundPointer => true;
         private readonly List<UWidgetComponent> widgets = new();
         public UWidgetComponent FocusedWidget { get; private set; }
         public IReadOnlyList<UWidgetComponent> Widgets => widgets.AsReadOnly();

@@ -56,6 +56,35 @@ namespace UnscriptedEngine.Tests
         public IEnumerator ExitRuntime() { yield return new ExitPlayMode(); }
 
         [UnityTest]
+        public IEnumerator GeneratedPanelUsesIndependentSourceAcrossDisableAndEnable()
+        {
+            SettingsService source = new SettingsService();
+            Setting<bool> definition = Setting.Bool("ui.instance.flag", false, "Instance flag", "Object");
+            using IDisposable registration = source.Register(new SettingDefinition[] { definition });
+            GameObject root = new GameObject("Instance panel", typeof(RectTransform));
+            root.SetActive(false);
+            try
+            {
+                GeneratedSettingsPanel panel = root.AddComponent<GeneratedSettingsPanel>();
+                panel.Bind(source);
+                root.SetActive(true);
+                yield return null;
+                Assert.AreEqual(1, root.GetComponentsInChildren<SettingsWidget>().Length);
+                Toggle editor = root.GetComponentsInChildren<Toggle>().Single(toggle => toggle.transform.parent.name == definition.Id);
+                editor.isOn = true;
+                Assert.IsTrue(source.Get(definition));
+                Assert.IsFalse(SettingsRuntime.Service.IsActive(definition));
+                root.SetActive(false);
+                source.TrySet(definition, false);
+                root.SetActive(true);
+                yield return null;
+                Assert.AreEqual(1, root.GetComponentsInChildren<SettingsWidget>().Length);
+                Assert.IsFalse(root.GetComponentsInChildren<SettingsWidget>().Single().GetComponentInChildren<Toggle>().isOn);
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        [UnityTest]
         public IEnumerator GeneratedPanelFiltersAdvancedSettingsAndRemovesDisabledProvider()
         {
             GameObject providerObject = new GameObject("Scene Settings Container");

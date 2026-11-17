@@ -158,6 +158,7 @@ namespace UnscriptedEngine
         private float pendingVerticalMoveInput;
         private bool jumpQueued;
         private Vector3 pendingExternalVelocityChange;
+        private Vector3 pendingAuthoritativeVelocityChange;
         private float controlYaw;
         private Vector3 velocity;
         private bool isGrounded;
@@ -190,6 +191,7 @@ namespace UnscriptedEngine
                 jumpQueued = false;
                 velocity = Vector3.zero;
                 pendingExternalVelocityChange = Vector3.zero;
+                pendingAuthoritativeVelocityChange = Vector3.zero;
             }
         }
 
@@ -291,9 +293,7 @@ namespace UnscriptedEngine
         public void QueueExternalVelocityChange(Vector3 change)
         {
             if (!IsOwner || IsMovementLocked) return;
-            if (float.IsNaN(change.x) || float.IsInfinity(change.x)
-                || float.IsNaN(change.y) || float.IsInfinity(change.y)
-                || float.IsNaN(change.z) || float.IsInfinity(change.z)) return;
+            if (!PhysicsForceUtility.IsFinite(change)) return;
             pendingExternalVelocityChange = Vector3.ClampMagnitude(pendingExternalVelocityChange + change, 100f);
         }
 
@@ -301,6 +301,23 @@ namespace UnscriptedEngine
         {
             velocity = Vector3.zero;
             pendingExternalVelocityChange = Vector3.zero;
+            pendingAuthoritativeVelocityChange = Vector3.zero;
+        }
+
+        /// <summary>Server-owned environmental force, consumed after movement acceleration on the next simulation step.</summary>
+        public bool QueueAuthoritativeVelocityChange(Vector3 change)
+        {
+            if (!isActiveAndEnabled || IsMovementLocked || (IsSpawned && !IsServer)) return false;
+            if (!PhysicsForceUtility.IsFinite(change)) return false;
+            pendingAuthoritativeVelocityChange += change;
+            return true;
+        }
+
+        private CharacterMoveInput ApplyAuthoritativeVelocityChange(CharacterMoveInput input)
+        {
+            input.ExternalVelocityChange += pendingAuthoritativeVelocityChange;
+            pendingAuthoritativeVelocityChange = Vector3.zero;
+            return input;
         }
 
         protected override void Awake()
@@ -448,7 +465,7 @@ namespace UnscriptedEngine
 
             pendingExternalVelocityChange = Vector3.zero;
             localTick++;
-            return SanitizeInput(input);
+            return ApplyAuthoritativeVelocityChange(SanitizeInput(input));
         }
 
         private CharacterMoveInput SanitizeInput(CharacterMoveInput input)
@@ -461,9 +478,7 @@ namespace UnscriptedEngine
                 input.IsFlying = false;
             }
             Vector3 change = input.ExternalVelocityChange;
-            input.ExternalVelocityChange = float.IsNaN(change.x) || float.IsInfinity(change.x)
-                || float.IsNaN(change.y) || float.IsInfinity(change.y)
-                || float.IsNaN(change.z) || float.IsInfinity(change.z)
+            input.ExternalVelocityChange = !PhysicsForceUtility.IsFinite(change)
                 ? Vector3.zero : Vector3.ClampMagnitude(change, 100f);
             Vector2 move = Vector2.ClampMagnitude(new Vector2(input.MoveX, input.MoveY), 1f);
             input.MoveX = move.x;
@@ -643,6 +658,8 @@ namespace UnscriptedEngine
                 return;
             }
 
+            input = ApplyAuthoritativeVelocityChange(input);
+
             // Body facing is independent of movement/control yaw in free orbit.
             // Apply only on the receiving server, never during owner prediction
             // or reconciliation replay, which must preserve current local look.
@@ -812,6 +829,7 @@ namespace UnscriptedEngine
             proxySyncSuppressedUntil = 0f;
             velocity = Vector3.zero;
             pendingExternalVelocityChange = Vector3.zero;
+            pendingAuthoritativeVelocityChange = Vector3.zero;
             isGrounded = characterController != null && characterController.isGrounded;
             pendingVerticalMoveInput = 0f;
             ResetFixedPositionSamples(transform.position);
@@ -967,5 +985,3 @@ namespace UnscriptedEngine
         }
     }
 }
-
-

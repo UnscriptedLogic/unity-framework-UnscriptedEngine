@@ -190,7 +190,7 @@ namespace UnscriptedEngine.UI
                     RectTransform backdrop = CreateRect("Modal backdrop", parent);
                     Image image = backdrop.gameObject.AddComponent<Image>();
                     image.color = Color.clear;
-                    image.raycastTarget = true;
+                    image.raycastTarget = screen.BlocksBackgroundPointer;
                     backdrops.Add(screen, backdrop.gameObject);
                 }
 

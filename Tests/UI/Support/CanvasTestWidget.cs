@@ -10,8 +10,10 @@ namespace UnscriptedEngine.Tests
         public int Calls;
         public bool Initialized;
         public bool ShownAfterInitialization;
+        public bool BlockBackgroundPointer = true;
         public override CanvasLayer Layer => TestLayer;
         public override CanvasInputPolicy InputPolicy => Policy;
+        public override bool BlocksBackgroundPointer => BlockBackgroundPointer;
         protected override void OnShown() => ShownAfterInitialization = Initialized && Controller != null;
         public override bool HandleInput(PlayerInputEvent input)
         {

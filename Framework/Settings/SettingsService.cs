@@ -19,7 +19,7 @@ namespace UnscriptedEngine.Settings
     }
 
     /// <summary>Main-thread state store. Scene registrations determine activation, not code references.</summary>
-    public sealed class SettingsService
+    public sealed class SettingsService : ISettingsValueSource
     {
         private sealed class Entry
         {

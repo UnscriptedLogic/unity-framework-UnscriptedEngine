@@ -20,7 +20,8 @@ namespace UnscriptedEngine.UI.Settings
         [SerializeField]
         [Tooltip("Optional TextMeshPro empty-state prefab for custom layouts.")]
         private TMPro.TMP_Text emptyStatePrefab;
-        private SettingsService service;
+        private ISettingsValueSource service;
+        private bool usesPreferences = true;
         private string search = "";
         private bool showAdvanced;
         private bool dirty;
@@ -35,7 +36,7 @@ namespace UnscriptedEngine.UI.Settings
 
         private void OnEnable()
         {
-            service = SettingsRuntime.Service;
+            if (service == null) service = SettingsRuntime.Service;
             service.StructureChanged += Refresh;
             if (content == null) CreateTemplateLayout();
             Refresh();
@@ -44,7 +45,19 @@ namespace UnscriptedEngine.UI.Settings
         private void OnDisable()
         {
             if (service != null) service.StructureChanged -= Refresh;
-            SettingsRuntime.Save();
+            if (usesPreferences) SettingsRuntime.Save();
+        }
+
+        /// <summary>Bind before activation to edit instance values without loading or saving preferences.</summary>
+        public void Bind(ISettingsValueSource source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            ClearGeneratedGroups();
+            if (isActiveAndEnabled && service != null) service.StructureChanged -= Refresh;
+            service = source;
+            usesPreferences = false;
+            if (isActiveAndEnabled) service.StructureChanged += Refresh;
+            Refresh();
         }
 
         private void LateUpdate()

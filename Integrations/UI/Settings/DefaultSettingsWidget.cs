@@ -64,20 +64,23 @@ namespace UnscriptedEngine.UI.Settings
 
         private void CreateNumericEditor(RectTransform root, bool writable)
         {
-            slider = SettingsTemplateUI.Slider(root);
-            if (Definition is FloatSettingDefinition number)
+            if (Definition.EditorHint != "number-input") slider = SettingsTemplateUI.Slider(root);
+            if (slider != null)
             {
-                slider.minValue = number.Minimum;
-                slider.maxValue = number.Maximum;
+                if (Definition is FloatSettingDefinition number)
+                {
+                    slider.minValue = number.Minimum;
+                    slider.maxValue = number.Maximum;
+                }
+                else if (Definition is IntSettingDefinition integer)
+                {
+                    slider.minValue = integer.Minimum;
+                    slider.maxValue = integer.Maximum;
+                    slider.wholeNumbers = true;
+                }
+                slider.interactable = writable;
+                slider.onValueChanged.AddListener(ChangeNumber);
             }
-            else if (Definition is IntSettingDefinition integer)
-            {
-                slider.minValue = integer.Minimum;
-                slider.maxValue = integer.Maximum;
-                slider.wholeNumbers = true;
-            }
-            slider.interactable = writable;
-            slider.onValueChanged.AddListener(ChangeNumber);
             CreateTextEditor(root, writable);
         }
 
@@ -90,7 +93,7 @@ namespace UnscriptedEngine.UI.Settings
 
         private void CreateResetControl(RectTransform root, bool writable)
         {
-            if (!writable) SettingsTemplateUI.Label(root, "Controlled by server", 13);
+            if (!writable) SettingsTemplateUI.Label(root, "Read only", 13);
             reset = SettingsTemplateUI.Button(root, "Reset to default");
             reset.interactable = writable;
             reset.onClick.AddListener(ResetValue);

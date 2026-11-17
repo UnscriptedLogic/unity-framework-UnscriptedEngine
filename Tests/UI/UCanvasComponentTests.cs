@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine.TestTools;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
@@ -53,6 +54,16 @@ namespace UnscriptedEngine.Tests
             prefab = null;
 
             yield return new ExitPlayMode();
+        }
+
+        [Test] public void WorldModalKeepsGameplayFocusWithoutOverlayPointerBlocker()
+        {
+            CanvasTestWidget screen = canvas.Show(prefab, instance => instance.BlockBackgroundPointer = false);
+            Assert.IsTrue(InputFocus.IsBlocked(controller));
+            Image backdrop = canvas.GetComponentsInChildren<Image>().Single(image => image.name == "Modal backdrop");
+            Assert.IsFalse(backdrop.raycastTarget);
+            screen.Close();
+            Assert.IsFalse(InputFocus.IsBlocked(controller));
         }
 
         [Test] public void NullOwnerFactoryDoesNotCreateOrLeakRoot()

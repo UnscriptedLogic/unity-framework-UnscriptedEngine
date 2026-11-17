@@ -8,7 +8,7 @@ namespace UnscriptedEngine.Editor
     public sealed class ColliderZoneCreatorWindow : EditorWindow
     {
         private enum ZoneShape { Box, Sphere, Capsule }
-        private enum ZoneKind { Collider, Damage, Status }
+        private enum ZoneKind { Collider, Damage, Status, Wind, Suction, Knockback }
         private ZoneKind zoneKind;
         private ZoneShape zoneShape;
         private string zoneName = "Collider Zone";
@@ -27,16 +27,27 @@ namespace UnscriptedEngine.Editor
         private StatusZone statusTemplate;
         private SerializedObject damageSettings;
         private SerializedObject statusSettings;
+        private PhysicsForceZone[] physicsTemplates;
+        private SerializedObject[] physicsSettings;
         private Vector2 scroll;
 
-        [MenuItem("Tools/UnscriptedEngine/Gameplay/Collider Zones")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Collider Zones")]
         public static void Open() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones");
 
-        [MenuItem("Tools/UnscriptedEngine/Gameplay/Damage Zones")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Damage Zones")]
         public static void OpenDamage() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones").SetZoneKind(ZoneKind.Damage);
 
-        [MenuItem("Tools/UnscriptedEngine/Gameplay/Status Zones")]
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Status Zones")]
         public static void OpenStatus() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones").SetZoneKind(ZoneKind.Status);
+
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Wind Zones")]
+        public static void OpenWind() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones").SetZoneKind(ZoneKind.Wind);
+
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Suction Zones")]
+        public static void OpenSuction() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones").SetZoneKind(ZoneKind.Suction);
+
+        [MenuItem("Tools/UnscriptedEngine/Gameplay/Zones/Knockback Zones")]
+        public static void OpenKnockback() => GetWindow<ColliderZoneCreatorWindow>("Collider Zones").SetZoneKind(ZoneKind.Knockback);
 
         private void SetZoneKind(ZoneKind kind)
         {
@@ -56,6 +67,13 @@ namespace UnscriptedEngine.Editor
             statusTemplate = templateObject.AddComponent<StatusZone>();
             damageSettings = new SerializedObject(damageTemplate);
             statusSettings = new SerializedObject(statusTemplate);
+            physicsTemplates = new PhysicsForceZone[] {
+                templateObject.AddComponent<UnscriptedEngine.Gameplay.WindZone>(),
+                templateObject.AddComponent<SuctionZone>(), templateObject.AddComponent<KnockbackZone>() };
+            physicsTemplates[2].RequireLineOfSight = false;
+            physicsSettings = new SerializedObject[physicsTemplates.Length];
+            for (int index = 0; index < physicsTemplates.Length; index++)
+                physicsSettings[index] = new SerializedObject(physicsTemplates[index]);
         }
 
         private void OnDisable()
@@ -63,6 +81,8 @@ namespace UnscriptedEngine.Editor
             settings?.Dispose();
             damageSettings?.Dispose();
             statusSettings?.Dispose();
+            if (physicsSettings != null)
+                foreach (SerializedObject effectSettings in physicsSettings) effectSettings?.Dispose();
             if (templateObject != null) DestroyImmediate(templateObject);
         }
 
@@ -103,6 +123,7 @@ namespace UnscriptedEngine.Editor
             EditorGUILayout.PropertyField(settings.FindProperty("showGizmos"));
             EditorGUILayout.PropertyField(settings.FindProperty("flashDuration"));
             settings.ApplyModifiedProperties();
+            if (zoneKind >= ZoneKind.Wind) DrawEffectSettings(physicsSettings[(int)zoneKind - (int)ZoneKind.Wind]);
             if (zoneKind == ZoneKind.Damage) DrawEffectSettings(damageSettings);
             if (zoneKind == ZoneKind.Status)
             {
@@ -173,6 +194,11 @@ namespace UnscriptedEngine.Editor
                 EditorUtility.CopySerialized(damageTemplate, Undo.AddComponent<DamageZone>(zoneObject));
             if (zoneKind == ZoneKind.Status)
                 EditorUtility.CopySerialized(statusTemplate, Undo.AddComponent<StatusZone>(zoneObject));
+            if (zoneKind >= ZoneKind.Wind)
+            {
+                PhysicsForceZone effectTemplate = physicsTemplates[(int)zoneKind - (int)ZoneKind.Wind];
+                EditorUtility.CopySerialized(effectTemplate, Undo.AddComponent(zoneObject, effectTemplate.GetType()));
+            }
             EditorSceneManager.MarkSceneDirty(zoneObject.scene);
             Selection.activeGameObject = zoneObject;
             Undo.CollapseUndoOperations(group);

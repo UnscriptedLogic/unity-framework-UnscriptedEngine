@@ -66,7 +66,9 @@ public void UpdateCameraMode()
         thirdPersonCameraAim.Priority.Value = _isThirdPersonAiming ? 10 : 0;
 
         if (_orbitInput != null)
-                _orbitInput.enabled = !inputBlocked && !_isFirstPerson && !_isThirdPersonAiming;
+            // The pawn supplies look input in every mode, including sensitivity and inversion.
+            // Disable Cinemachine's separate reader to avoid bypassing settings or applying input twice.
+            _orbitInput.enabled = false;
     }
 
 public void ApplyLookRotation(Quaternion rotation)
@@ -140,7 +142,7 @@ public void AlignThirdPersonOrbit(Quaternion rotation)
 
 public void HandleLookInput(Vector2 input, bool isPointerDelta)
     {
-        if (Cursor.lockState != CursorLockMode.Locked)
+        if (inputBlocked || Cursor.lockState != CursorLockMode.Locked)
         {
             return;
         }
@@ -150,7 +152,16 @@ public void HandleLookInput(Vector2 input, bool isPointerDelta)
             : input * (gamepadLookSpeed * Time.deltaTime);
 
         if (!_isFirstPerson && !_isThirdPersonAiming)
-            return; // Cinemachine owns free-orbit input and pitch.
+        {
+            if (_thirdPersonOrbit != null)
+            {
+                _thirdPersonOrbit.HorizontalAxis.Value = _thirdPersonOrbit.HorizontalAxis.ClampValue(
+                    _thirdPersonOrbit.HorizontalAxis.Value + lookDelta.x);
+                _thirdPersonOrbit.VerticalAxis.Value = _thirdPersonOrbit.VerticalAxis.ClampValue(
+                    _thirdPersonOrbit.VerticalAxis.Value - lookDelta.y);
+            }
+            return;
+        }
 
         _cameraPitch = Mathf.Clamp(_cameraPitch - lookDelta.y, -maxLookAngle, maxLookAngle);
 

@@ -13,10 +13,10 @@ namespace UnscriptedEngine.UI.Settings
     /// <summary>Base contract for themed controls. Own only UI here; writes go through the service.</summary>
     public abstract class SettingsWidget : UWidgetComponent
     {
-        protected SettingsService Service { get; private set; }
+        protected ISettingsValueSource Service { get; private set; }
         protected SettingDefinition Definition { get; private set; }
         private IDisposable subscription;
-        public void Bind(SettingsService service, SettingDefinition definition)
+        public void Bind(ISettingsValueSource service, SettingDefinition definition)
         {
             Unbind();
             Service = service;
