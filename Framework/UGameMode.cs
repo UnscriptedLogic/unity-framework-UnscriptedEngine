@@ -426,6 +426,10 @@ namespace UnscriptedEngine
             return defaultPawnPrefab;
         }
 
+        protected virtual bool CanSpawnDefaultPawn(ulong clientId) => true;
+
+        protected virtual void ConfigureDefaultPawnBeforeSpawn(UPawn pawn) { }
+
         protected virtual Vector3 GetDefaultPawnSpawnPosition(ulong clientId, UController controller)
         {
             return defaultPawnSpawnPoint != null
@@ -512,6 +516,8 @@ namespace UnscriptedEngine
                 return controller.Possess(existingPawn);
             }
 
+            if (!CanSpawnDefaultPawn(clientId)) return false;
+
             UPawn pawnPrefab = GetDefaultPawnPrefab(clientId, controller);
 
             if (pawnPrefab == null)
@@ -538,6 +544,7 @@ namespace UnscriptedEngine
                 return false;
             }
 
+            ConfigureDefaultPawnBeforeSpawn(pawn);
             pawnNetworkObject.SpawnWithOwnership(clientId, true);
             spawnedDefaultPawns[clientId] = pawnNetworkObject;
             return controller.Possess(pawn);
@@ -565,6 +572,11 @@ namespace UnscriptedEngine
             DespawnDefaultPawnForClient(clientId);
             return RegisterConnectedClient(clientId);
         }
+
+        protected bool IsTrackedDefaultPawn(UPawn pawn) =>
+            pawn != null && pawn.IsSpawned &&
+            spawnedDefaultPawns.TryGetValue(pawn.OwnerClientId, out NetworkObject tracked) &&
+            tracked == pawn.NetworkObject;
 
         private void DespawnDefaultPawnForClient(ulong clientId)
         {

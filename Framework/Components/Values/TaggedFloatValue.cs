@@ -35,6 +35,9 @@ namespace UnscriptedEngine
         [SerializeField, Tooltip("Invoked locally when the value changes, including received network updates. Also invoked on network spawn to initialize listeners.")]
         private FloatChangedEvent onValueChanged = new FloatChangedEvent();
 
+        [SerializeField, Tooltip("Passes the new value when it decreases offline or on the network owner. Skips initial synchronization.")]
+        private FloatChangedEvent onOwnerValueDecreased = new FloatChangedEvent();
+
         private readonly NetworkVariable<float> networkValue = new NetworkVariable<float>(
             0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
         private float localValue;
@@ -46,6 +49,7 @@ namespace UnscriptedEngine
         public float Minimum => minimum;
         public float Maximum => maximum;
         public FloatChangedEvent OnValueChanged => onValueChanged;
+        public FloatChangedEvent OnOwnerValueDecreased => onOwnerValueDecreased;
 
         // Child values share their pawn's NetworkObject. Servers may configure prefabs before spawn.
         public bool CanWrite => IsSpawned ? IsServer :
@@ -101,7 +105,7 @@ namespace UnscriptedEngine
                 float previousValue = Value;
                 localValue = nextValue;
                 localValueInitialized = true;
-                if (previousValue != nextValue) onValueChanged.Invoke(localValue);
+                if (previousValue != nextValue) NotifyValueChanged(previousValue, nextValue);
             }
             return true;
         }
@@ -120,7 +124,14 @@ namespace UnscriptedEngine
         private void HandleNetworkValueChanged(float previousValue, float nextValue)
         {
             localValue = nextValue;
+            NotifyValueChanged(previousValue, nextValue);
+        }
+
+        private void NotifyValueChanged(float previousValue, float nextValue)
+        {
             onValueChanged.Invoke(nextValue);
+            if (nextValue < previousValue && (!IsSpawned || IsOwner))
+                onOwnerValueDecreased.Invoke(nextValue);
         }
 
         private float Constrain(float nextValue)
