@@ -29,6 +29,20 @@ AudioRuntime.SetCategoryVolume(AudioCategories.UI, 0.4f);
 
 Missing clips or exhausted pool return `null`. Use null-safe handle access. A handle becomes invalid after a one-shot finishes or after `Stop`/`Dispose`; it never takes control of a reused source.
 
+## UnityEvents and interactable sounds
+
+Add **Unscripted Engine/Audio/Audio Event Player** to an object to trigger shared audio from Inspector events. Assign its clip, volume, and category (default: `sound-effects`). Positional playback defaults to 3D at the object's position when triggered; disable it for 2D audio.
+
+For an interactable cube:
+
+1. Add `AudioEventPlayer` to the cube and assign the interaction clip.
+2. In `UInteractableComponent`, add a listener under **On Button Interacted Locally**.
+3. Drag the cube into the listener and select **AudioEventPlayer → Play()**.
+
+This plays on successful completion for the interacting player, including offline play. Use **On Button Pressed Client** instead for playback on each client. Use **On Interaction Started** if the sound should happen at the start of a timed interaction. Wire only one of these events for the same sound to avoid duplicate playback. The player does not replicate audio itself; the interaction event determines where playback runs.
+
+Each call starts an independent pooled one-shot and respects category/master volume. Missing clips, disabled components, and calls outside Play mode do nothing. Sounds finish independently if the cube is disabled or destroyed, and positional sounds remain at their initial position. An enabled AudioListener is required.
+
 ## Categories and sliders 🎚️
 
 Built-in IDs: `ambience`, `ui`, `player`, `entities`, `misc`, `music`, `sound-effects`. Constants live in `AudioCategories`. All are registered at startup, so sliders exist before sounds play. Music defaults to 0.8; others and master default to 1.
