@@ -33,6 +33,16 @@ namespace UnscriptedEngine.Tests
         }
         [Test] public void StableIdMatchesKnownFnvVector() => Assert.That(Tag("hello").Id, Is.EqualTo(0xa430d84680aabd0bUL));
         [Test] public void EmptyTagIsInvalid() => Assert.That(Tag("").IsValid, Is.False);
+        [Test] public void PathQueryMatchesAuthoredTagAndParentsWithoutLoadingQueryAssets()
+        {
+            GameplayTag parent = Tag("Config.ExemptTransformWand");
+            GameplayTag child = Tag("Config.ExemptTransformWand.Protected", parent);
+            GameplayTagContainer container = new GameplayTagContainer(); container.Add(child);
+            Assert.That(container.HasPath("Config.ExemptTransformWand"), Is.True);
+            Assert.That(container.HasPath("Config.ExemptTransformWand.Protected"), Is.True);
+            Assert.That(container.HasPath("Config.Other"), Is.False);
+            Assert.That(container.HasPath(""), Is.False);
+        }
         [Test] public void SamePathAssetsMatchAndCanRemoveEachOther()
         {
             var first = Tag("Combat"); var equivalent = Tag("Combat");

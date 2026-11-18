@@ -61,6 +61,14 @@ namespace Framework.GameplayTag
             return tag != null && tag.IsValid && expandedIds.Contains(tag.Id);
         }
 
+        /// <summary>Query a known tag path without loading or manufacturing a ScriptableObject.</summary>
+        public bool HasPath(string path)
+        {
+            EnsureRuntimeSets();
+            ulong id = GameplayTagId.FromPath(GameplayTagPath.Normalize(path));
+            return id != 0 && expandedIds.Contains(id);
+        }
+
         public bool HasAny(params GameplayTag[] queries)
         {
             if (queries == null)
