@@ -9,7 +9,7 @@ namespace UnscriptedEngine.Transforms
         private readonly TransformToolMode mode;
         private readonly TransformGizmoHandle handle;
         private readonly Quaternion basis;
-        private readonly Vector3 axis, startPoint;
+        private readonly Vector3 axis, startPoint, aimReference;
         private readonly Plane plane;
         private readonly Vector2 startPointer, screenAxis;
         private readonly Vector2 screenPivot;
@@ -31,19 +31,21 @@ namespace UnscriptedEngine.Transforms
             plane = new Plane(normal, edit.Pivot);
             rayPlaneValid = TryPoint(camera.ScreenPointToRay(pointer), out startPoint);
             screenPivot = camera.WorldToScreenPoint(edit.Pivot);
+            aimReference = camera.ScreenPointToRay(pointer).GetPoint(Vector3.Distance(camera.transform.position, edit.Pivot));
             Vector2 projectedAxis = (Vector2)camera.WorldToScreenPoint(edit.Pivot + axis * size) - screenPivot;
             screenAxis = projectedAxis.sqrMagnitude > 16f ? projectedAxis.normalized : Vector2.up;
         }
 
-        public void Update(Camera camera, Vector2 pointer)
+        public void Update(Camera camera, Vector2 pointer, bool aimDriven = false)
         {
             bool hasPoint = TryPoint(camera.ScreenPointToRay(pointer), out Vector3 point);
-            Vector2 pixels = pointer - startPointer;
+            Vector2 pixels = aimDriven ? pointer - (Vector2)camera.WorldToScreenPoint(aimReference) : pointer - startPointer;
+            Vector2 dragPointer = startPointer + pixels;
             if (mode == TransformToolMode.Rotate)
             {
                 float angle = rayPlaneValid && hasPoint && (startPoint - edit.Pivot).sqrMagnitude > .00001f
                     ? Vector3.SignedAngle(startPoint - edit.Pivot, point - edit.Pivot, axis)
-                    : Vector2.SignedAngle(startPointer - screenPivot, pointer - screenPivot)
+                    : Vector2.SignedAngle(startPointer - screenPivot, dragPointer - screenPivot)
                         * (Vector3.Dot(axis, camera.transform.forward) >= 0f ? 1f : -1f);
                 totalAngle += Mathf.DeltaAngle(previousAngle, angle); previousAngle = angle;
                 edit.Rotate(Quaternion.AngleAxis(totalAngle, axis));

@@ -37,6 +37,27 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void FullRotationAlignsAnOffsetMuzzleWithTheAimPoint()
+        {
+            GameObject root = new GameObject("Facing test");
+            try
+            {
+                FaceToTarget facing = root.AddComponent<FaceToTarget>();
+                UnityEditor.SerializedObject settings = new UnityEditor.SerializedObject(facing);
+                settings.FindProperty("yawOnly").boolValue = false;
+                settings.ApplyModifiedPropertiesWithoutUndo();
+                Transform muzzle = new GameObject("Muzzle").transform;
+                muzzle.SetParent(root.transform, false);
+                muzzle.localPosition = new Vector3(0.1f, 0.6f, 0.63f);
+                Vector3 point = new Vector3(1f, 0.6f, 3f);
+
+                Assert.That(facing.Face(point, 1f, muzzle), Is.True);
+                Assert.That(Vector3.Angle(muzzle.forward, point - muzzle.position), Is.LessThan(0.05f));
+            }
+            finally { Object.DestroyImmediate(root); }
+        }
+
+        [Test]
         public void SightRejectsWallsAcceptsTargetChildrenAndIgnoresTriggers()
         {
             GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
