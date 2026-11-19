@@ -101,7 +101,11 @@ namespace UnscriptedEngine.Configuration
         {
             SaveState state = new SaveState();
             HashSet<string> seen = new HashSet<string>();
+#if UNITY_6000_4_OR_NEWER
+            foreach (ConfigurableObject target in UnityEngine.Object.FindObjectsByType<ConfigurableObject>(FindObjectsInactive.Include))
+#else
             foreach (ConfigurableObject target in UnityEngine.Object.FindObjectsByType<ConfigurableObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+#endif
             {
                 if (string.IsNullOrEmpty(target.gameObject.scene.path)) continue;
                 foreach (ConfigurableField field in target.Fields)

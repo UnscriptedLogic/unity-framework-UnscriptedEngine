@@ -154,7 +154,11 @@ namespace UnscriptedEngine.UI
                 return;
             }
             if (Time.unscaledTimeAsDouble < nextDiscovery) return;
+#if UNITY_6000_4_OR_NEWER
+            CharacterMovementComponent[] candidates = FindObjectsByType<CharacterMovementComponent>();
+#else
             CharacterMovementComponent[] candidates = FindObjectsByType<CharacterMovementComponent>(FindObjectsSortMode.None);
+#endif
             CharacterMovementComponent selected = null;
             foreach (CharacterMovementComponent candidate in candidates)
             {
