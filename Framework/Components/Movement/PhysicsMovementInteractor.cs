@@ -5,7 +5,7 @@ namespace UnscriptedEngine
 {
     /// <summary>
     /// Attach beside a CharacterController or the Rigidbody receiving collision callbacks.
-    /// Targets need non-kinematic Rigidbodies and non-trigger colliders.
+    /// Targets need non-trigger colliders and a dynamic or releasable Rigidbody.
     /// Networked physics is applied on the server; targets must replicate their own transforms.
     /// </summary>
     [DisallowMultipleComponent]
@@ -115,7 +115,7 @@ namespace UnscriptedEngine
 
         private bool IsPushable(Collider targetCollider, Rigidbody targetBody)
         {
-            if (targetBody == null || targetBody.isKinematic || targetBody == sourceBody)
+            if (!PhysicsForceUtility.CanReceiveForce(targetBody) || targetBody == sourceBody)
                 return false;
 
             if (targetBody.transform == transform || targetBody.transform.IsChildOf(transform))
@@ -156,8 +156,9 @@ namespace UnscriptedEngine
             if (impulseMagnitude <= 0f)
                 return;
 
-            pushedBodies.Add(targetBody);
-            ApplyPushImpulse(targetBody, point, pushDirection * impulseMagnitude);
+            if (PhysicsForceUtility.TryApply(targetBody, pushDirection * impulseMagnitude, ForceMode.Impulse,
+                applyAtContactPoint ? point : null))
+                pushedBodies.Add(targetBody);
         }
 
         private float CalculatePushImpulse(Rigidbody targetBody, Vector3 direction, float movementSpeed)
@@ -169,12 +170,5 @@ namespace UnscriptedEngine
             return Mathf.Min(speedIncrease * targetBody.mass, maximumPushImpulse);
         }
 
-        private void ApplyPushImpulse(Rigidbody targetBody, Vector3 contactPoint, Vector3 impulse)
-        {
-            if (applyAtContactPoint)
-                targetBody.AddForceAtPosition(impulse, contactPoint, ForceMode.Impulse);
-            else
-                targetBody.AddForce(impulse, ForceMode.Impulse);
-        }
     }
 }

@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.Pool;
@@ -106,13 +107,15 @@ namespace UnscriptedEngine
             Collider[] colliders = Physics.OverlapSphere(transform.position, radius);
             Debug.Log(colliders.Length);
             
+            using var bodyPool = HashSetPool<Rigidbody>.Get(out HashSet<Rigidbody> affectedBodies);
             foreach (Collider collider in colliders)
             {
-                Rigidbody rb = collider.GetComponent<Rigidbody>();
+                Rigidbody rb = collider.attachedRigidbody;
                 if (rb != null)
                 {
                     Vector3 direction = (collider.transform.position - transform.position).normalized;
-                    rb.AddForce(direction * knockbackForce, ForceMode.Impulse);
+                    if (affectedBodies.Add(rb))
+                        PhysicsForceUtility.TryApply(rb, direction * knockbackForce, ForceMode.Impulse);
                     continue;
                 }
                 

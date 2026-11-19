@@ -13,7 +13,8 @@ namespace Framework.Generators
         [Min(0.0001f)] public float NoiseScale = 0.25f;
         [Min(0)] public float MinPieceSize = 0.15f;
         [Min(0.0001f)] public float MaxPieceSize = 0.5f;
-        [Range(1, 128)] public int MaxPieces = 16;
+        [Range(1, PieceLimit)] public int MaxPieces = 16;
+        public const int PieceLimit = 2048;
         public int Seed = 1;
     }
 
@@ -24,12 +25,14 @@ namespace Framework.Generators
             public Mesh Mesh { get; }
             public Vector3 LocalPosition { get; }
             public float Size { get; }
+            public int SourceIndex { get; }
 
-            internal Piece(Mesh mesh, Vector3 localPosition, float size)
+            internal Piece(Mesh mesh, Vector3 localPosition, float size, int sourceIndex)
             {
                 Mesh = mesh;
                 LocalPosition = localPosition;
                 Size = size;
+                SourceIndex = sourceIndex;
             }
         }
 
@@ -77,10 +80,12 @@ namespace Framework.Generators
             public readonly List<Triangle> Triangles;
             public readonly Bounds Bounds;
             public readonly float Size;
+            public readonly int SourceIndex;
 
-            public Solid(List<Triangle> triangles)
+            public Solid(List<Triangle> triangles, int sourceIndex)
             {
                 Triangles = triangles;
+                SourceIndex = sourceIndex;
                 var bounds = new Bounds(triangles[0].A.Position, Vector3.zero);
                 Vector3 origin = triangles[0].A.Position;
                 double volume = 0;
@@ -104,16 +109,25 @@ namespace Framework.Generators
         /// Splits a readable, connected, outward-wound closed mesh in local space.
         /// The caller owns the returned meshes. The last submesh contains fracture faces.
         /// </summary>
-        public static Piece[] Generate(Mesh mesh, FractureSettings settings)
+        public static Piece[] Generate(Mesh mesh, FractureSettings settings) =>
+            GenerateSolids(new[] { new MeshFractureInput(mesh, Matrix4x4.identity) }, settings);
+
+        /// <summary>
+        /// Splits separately authored solids in a common output-local space within one shared piece budget.
+        /// The caller owns the output meshes. Each piece retains its original input index.
+        /// </summary>
+        public static Piece[] GenerateSolids(IReadOnlyList<MeshFractureInput> inputs, FractureSettings settings)
         {
-            if (mesh == null || !mesh.isReadable)
-                throw new ArgumentException("Choose a CPU-readable mesh.", nameof(mesh));
+            if (inputs == null)
+                throw new ArgumentNullException(nameof(inputs));
+            if (inputs.Count == 0)
+                throw new ArgumentException("Choose at least one closed solid.", nameof(inputs));
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
             if (!float.IsFinite(settings.MinPieceSize) || !float.IsFinite(settings.MaxPieceSize) ||
                 settings.MinPieceSize < 0 || settings.MaxPieceSize <= 0 ||
-                settings.MaxPieceSize < settings.MinPieceSize || settings.MaxPieces < 1 || settings.MaxPieces > 128)
-                throw new ArgumentException("Use a valid piece size range and a piece limit of 1–128.");
+                settings.MaxPieceSize < settings.MinPieceSize || settings.MaxPieces < 1 || settings.MaxPieces > FractureSettings.PieceLimit)
+                throw new ArgumentException($"Use a valid piece size range and a piece limit of 1–{FractureSettings.PieceLimit}.");
             if (!float.IsFinite(settings.NoiseStrength) || settings.NoiseStrength < 0 ||
                 !float.IsFinite(settings.NoiseScale) || settings.NoiseScale <= 0)
                 throw new ArgumentException("Use a positive noise scale and a nonnegative strength.");
@@ -125,14 +139,31 @@ namespace Framework.Generators
                  settings.NoiseTexture.format == TextureFormat.ETC2_RGBA8Crunched))
                 throw new ArgumentException("Enable Read/Write and disable Crunch on the noise texture.");
 
-            var triangles = ReadTriangles(mesh);
-            var source = new Solid(triangles);
-            float epsilon = source.Bounds.size.magnitude * 0.000001f;
-            if (!(source.SignedVolume > 0) || !(epsilon > 0) || !IsClosedAndConnected(triangles, epsilon))
-                throw new ArgumentException("The mesh must be a connected, watertight solid with outward winding.");
+            if (inputs.Count > settings.MaxPieces)
+                throw new ArgumentException($"These inputs already contain {inputs.Count} solids. Increase Max Pieces or select fewer solids.");
 
+            var pending = new List<Solid>(inputs.Count);
+            var meshData = new Dictionary<Mesh, MeshData>();
+            for (int i = 0; i < inputs.Count; i++)
+            {
+                MeshFractureInput input = inputs[i];
+                string name = string.IsNullOrEmpty(input.Name) ? $"Solid {i + 1}" : input.Name;
+                if (input.Mesh == null || !input.Mesh.isReadable)
+                    throw new ArgumentException($"{name} requires a CPU-readable mesh.", nameof(inputs));
+                if (!meshData.TryGetValue(input.Mesh, out MeshData data))
+                {
+                    data = new MeshData(input.Mesh);
+                    meshData.Add(input.Mesh, data);
+                }
+
+                List<Triangle> triangles = data.ReadTriangles(input);
+                var source = new Solid(triangles, i);
+                float epsilon = source.Bounds.size.magnitude * 0.000001f;
+                if (!(source.SignedVolume > 0) || !(epsilon > 0) || !IsClosedAndConnected(triangles, epsilon))
+                    throw new ArgumentException($"{name} must be a connected, watertight solid with outward winding.");
+                pending.Add(source);
+            }
             var random = new System.Random(settings.Seed);
-            var pending = new List<Solid> { source };
             var finished = new List<Solid>();
             while (pending.Count > 0)
             {
@@ -147,7 +178,8 @@ namespace Framework.Generators
                 pending.RemoveAt(largest);
                 if (solid.Size > settings.MaxPieceSize &&
                     pending.Count + finished.Count + 2 <= settings.MaxPieces &&
-                    TrySplit(solid, settings, mesh.subMeshCount, epsilon, random, out Solid first, out Solid second))
+                    TrySplit(solid, settings, inputs[solid.SourceIndex].Mesh.subMeshCount,
+                        solid.Bounds.size.magnitude * 0.000001f, random, out Solid first, out Solid second))
                 {
                     pending.Add(first);
                     pending.Add(second);
@@ -160,36 +192,71 @@ namespace Framework.Generators
 
             var pieces = new Piece[finished.Count];
             for (int i = 0; i < pieces.Length; i++)
-                pieces[i] = BuildMesh(finished[i], mesh.subMeshCount + 1, i);
+                pieces[i] = BuildMesh(finished[i], inputs[finished[i].SourceIndex].Mesh.subMeshCount + 1, i);
             return pieces;
         }
 
-        private static List<Triangle> ReadTriangles(Mesh mesh)
+        private sealed class MeshData
         {
-            Vector3[] positions = mesh.vertices;
-            Vector3[] normals = mesh.normals;
-            Vector2[] uvs = mesh.uv;
-            var result = new List<Triangle>();
-            for (int submesh = 0; submesh < mesh.subMeshCount; submesh++)
+            private readonly Vector3[] positions;
+            private readonly Vector3[] normals;
+            private readonly Vector2[] uvs;
+            private readonly int[][] indices;
+
+            public MeshData(Mesh mesh)
             {
-                if (mesh.GetTopology(submesh) != MeshTopology.Triangles)
-                    throw new ArgumentException("Only triangle meshes can be fractured.");
-                int[] indices = mesh.GetTriangles(submesh);
-                for (int i = 0; i < indices.Length; i += 3)
+                positions = mesh.vertices;
+                normals = mesh.normals;
+                uvs = mesh.uv;
+                indices = new int[mesh.subMeshCount][];
+                for (int i = 0; i < indices.Length; i++)
                 {
-                    int a = indices[i], b = indices[i + 1], c = indices[i + 2];
-                    Vector3 normal = Vector3.Cross(positions[b] - positions[a], positions[c] - positions[a]).normalized;
-                    result.Add(new Triangle(Read(a, normal), Read(b, normal), Read(c, normal), submesh));
+                    if (mesh.GetTopology(i) != MeshTopology.Triangles)
+                        throw new ArgumentException("Only triangle meshes can be fractured.");
+                    indices[i] = mesh.GetTriangles(i);
                 }
             }
 
-            if (result.Count == 0)
-                throw new ArgumentException("The mesh contains no triangles.");
-            return result;
+            public List<Triangle> ReadTriangles(MeshFractureInput input)
+            {
+                Matrix4x4 transform = input.LocalTransform;
+                float determinant = transform.determinant;
+                if (!float.IsFinite(determinant) || determinant == 0f)
+                    throw new ArgumentException("A fracture input has a singular or invalid transform.");
 
-            Vertex Read(int index, Vector3 normal) => new Vertex(positions[index],
-                normals.Length == positions.Length ? normals[index] : normal,
-                uvs.Length == positions.Length ? uvs[index] : Vector2.zero);
+                Matrix4x4 normalTransform = transform.inverse.transpose;
+                bool useRange = input.TriangleCount != 0 || input.FirstTriangle != 0;
+                if (useRange && (indices.Length != 1 || input.FirstTriangle < 0 || input.TriangleCount <= 0 ||
+                    input.FirstTriangle > indices[0].Length / 3 - input.TriangleCount))
+                    throw new ArgumentException("A fracture triangle range must fit inside a single-submesh mesh.");
+
+                var result = new List<Triangle>();
+                for (int submesh = 0; submesh < indices.Length; submesh++)
+                {
+                    int[] triangles = indices[submesh];
+                    int start = useRange ? input.FirstTriangle * 3 : 0;
+                    int end = useRange ? start + input.TriangleCount * 3 : triangles.Length;
+                    for (int i = start; i < end; i += 3)
+                    {
+                        int a = triangles[i], b = triangles[i + 1], c = triangles[i + 2];
+                        if (determinant < 0f)
+                            (b, c) = (c, b);
+                        Vector3 pa = transform.MultiplyPoint3x4(positions[a]);
+                        Vector3 pb = transform.MultiplyPoint3x4(positions[b]);
+                        Vector3 pc = transform.MultiplyPoint3x4(positions[c]);
+                        Vector3 normal = Vector3.Cross(pb - pa, pc - pa).normalized;
+                        result.Add(new Triangle(Read(a, pa, normal), Read(b, pb, normal), Read(c, pc, normal), submesh));
+                    }
+                }
+
+                if (result.Count == 0)
+                    throw new ArgumentException("The mesh contains no triangles.");
+                return result;
+
+                Vertex Read(int index, Vector3 position, Vector3 normal) => new Vertex(position,
+                    normals.Length == positions.Length ? normalTransform.MultiplyVector(normals[index]).normalized : normal,
+                    uvs.Length == positions.Length ? uvs[index] : Vector2.zero);
+            }
         }
 
         private static bool TrySplit(Solid solid, FractureSettings settings, int capMaterial, float epsilon,
@@ -285,8 +352,8 @@ namespace Framework.Generators
             for (int i = 0; i < indices.Count; i += 3)
                 AddCap(indices[i], indices[i + 1], indices[i + 2]);
 
-            first = new Solid(negative);
-            second = new Solid(positive);
+            first = new Solid(negative, solid.SourceIndex);
+            second = new Solid(positive, solid.SourceIndex);
             double minimumVolume = epsilon * solid.Bounds.size.sqrMagnitude;
             return first.SignedVolume > minimumVolume && second.SignedVolume > minimumVolume &&
                 IsClosedAndConnected(negative, epsilon) && IsClosedAndConnected(positive, epsilon);
@@ -553,7 +620,7 @@ namespace Framework.Generators
                 mesh.SetTriangles(indices[i], i, false);
             mesh.RecalculateBounds();
             mesh.RecalculateTangents();
-            return new Piece(mesh, pivot, solid.Size);
+            return new Piece(mesh, pivot, solid.Size, solid.SourceIndex);
 
             void Add(Vertex vertex, List<int> submesh)
             {
