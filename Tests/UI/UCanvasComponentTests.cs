@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
@@ -105,6 +106,40 @@ namespace UnscriptedEngine.Tests
             Assert.That(inventory.HandleBack(), Is.True);
             Assert.That(canvas.FocusedCanvas, Is.Null);
             Assert.That(InputFocus.IsBlocked(controller), Is.False);
+        }
+
+        [Test] public void InteractingWithInventoryWithoutChestOpensItsPresenter()
+        {
+            controller.gameObject.AddComponent<UInventoryComponent>();
+            GameObject container = Create("Machine", typeof(BoxCollider), typeof(InspectableInventory));
+            UInventoryComponent stock = container.GetComponent<UInventoryComponent>();
+            InventoryTransferPanel template = Create("Inventory Template", typeof(RectTransform),
+                typeof(InventoryTransferPanel)).GetComponent<InventoryTransferPanel>();
+            template.gameObject.SetActive(false);
+            GameObject slot = Create("Slot Template", typeof(RectTransform), typeof(InventorySlotView));
+            var panel = new SerializedObject(template);
+            foreach (string property in new[] { "playerView", "containerView" })
+            {
+                InventoryView view = Create(property, typeof(RectTransform), typeof(InventoryView))
+                    .GetComponent<InventoryView>();
+                view.transform.SetParent(template.transform, false);
+                var viewData = new SerializedObject(view);
+                viewData.FindProperty("slotPrefab").objectReferenceValue = slot;
+                viewData.FindProperty("gridContainer").objectReferenceValue = view.transform;
+                viewData.ApplyModifiedPropertiesWithoutUndo();
+                panel.FindProperty(property).objectReferenceValue = view;
+            }
+            panel.ApplyModifiedPropertiesWithoutUndo();
+            var inspectable = new SerializedObject(container.GetComponent<InspectableInventory>());
+            inspectable.FindProperty("panel").objectReferenceValue = template;
+            inspectable.ApplyModifiedPropertiesWithoutUndo();
+
+            Assert.That(container.GetComponent<UChest>(), Is.Null);
+            Assert.That(container.GetComponent<UInteractableComponent>().TryBeginInteraction(controller.gameObject), Is.True);
+            Assert.That(canvas.FocusedCanvas, Is.TypeOf<InventoryTransferPanel>());
+            Assert.That(((InventoryTransferPanel)canvas.FocusedCanvas).Displays(stock), Is.True);
+            container.SetActive(false);
+            Assert.That(canvas.FocusedCanvas, Is.Null);
         }
 
         [Test] public void LayerOutranksRecencyAndPassiveOverlayDoesNotStealFocus()

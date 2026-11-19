@@ -75,6 +75,25 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void SingleCycleChangesDirectionWithoutJumping()
+        {
+            brain.PlayForward();
+            brain.Advance(0.5f);
+            brain.PlayReverse();
+            Assert.That(root.transform.localPosition.x, Is.EqualTo(4));
+            brain.Advance(0.25f);
+            Assert.That(root.transform.localPosition.x, Is.EqualTo(3));
+            brain.PlayForward();
+            Assert.That(root.transform.localPosition.x, Is.EqualTo(3));
+            brain.Advance(1f);
+            Assert.That(root.transform.localPosition.x, Is.EqualTo(6));
+            brain.PlayReverse();
+            brain.Advance(1f);
+            Assert.That(root.transform.localPosition.x, Is.EqualTo(2));
+            Assert.That(brain.IsPlaying, Is.False);
+        }
+
+        [Test]
         public void StopHoldsResetRestoresAndDisableCancels()
         {
             brain.Play(); brain.Advance(0.5f); brain.Stop(); brain.Advance(1);

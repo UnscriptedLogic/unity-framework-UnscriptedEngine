@@ -4,6 +4,16 @@ For prefab generation and the extensible chest base, see [Chest creator](ChestCr
 
 Player bags, chests, corpses and crates all use `UInventoryComponent`. Storage knows nothing about chest animations or UI. Optional components compose those behaviours.
 
+## Make an inventory inspectable
+
+1. Select the GameObject with the `UInventoryComponent` in the scene or in Prefab Mode. Open the inventory component's context menu and choose **Make Inventory Inspectable**. The same action is under **Tools / UnscriptedEngine / Gameplay / Items**.
+2. Choose a UI prefab and click **Apply**. The picker lists prefabs with an `InventoryPresenter` on the root. **Create Split Inventory Prefab…** saves a reusable panel based on the existing two-inventory layout.
+3. Give the object an interaction collider and test with a player that has an initialized `UCanvasController`. The action adds `InspectableInventory` and its required `UInteractableComponent`. Validated local interaction opens a managed copy of the panel for the player.
+
+For a machine, apply the action to its output inventory GameObject. For an existing split-inventory chest, the action updates its panel template while keeping chest loot initialization and open/close events. The split panel supports two-way transfers. Networked transfers from remote clients require the validated adapter described below.
+
+To author another layout, derive its root component from `InventoryPresenter` and bind the supplied inventories in `Open(player, inventory)`. Override `CanOpen` if the layout requires a separate player inventory. Save the root as a prefab so the picker can find it. For read-only layouts, render inventory contents with display-only widgets. An `InventoryView` bound directly to a `UInventoryComponent` enables slot rearrangement.
+
 ```mermaid
 flowchart LR
     Interaction --> Panel[InventoryTransferPanel]

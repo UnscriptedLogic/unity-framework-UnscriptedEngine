@@ -20,6 +20,7 @@ namespace UnscriptedEngine
         private double elapsed;
         private float playingDuration;
         private int playingCycles;
+        private bool reversing;
 
         public bool IsPlaying { get; private set; }
         public float Duration { get => duration; set => duration = Mathf.Max(0f, value); }
@@ -45,6 +46,7 @@ namespace UnscriptedEngine
                 if (component != null && !active.Contains(component) && component.Capture(this)) active.Add(component);
             if (active.Count == 0) return;
             elapsed = 0;
+            reversing = false;
             playingDuration = duration;
             playingCycles = cycles;
             if (playingDuration <= 0f)
@@ -53,8 +55,45 @@ namespace UnscriptedEngine
                 completed.Invoke();
                 return;
             }
-            IsPlaying = true;
             Sample(0f);
+            StartClock();
+        }
+
+        /// <summary>Continue a captured single cycle toward its end, or start fresh.</summary>
+        public void PlayForward()
+        {
+            if (!isActiveAndEnabled) return;
+            if (active.Count == 0 || playingCycles != 1)
+            {
+                Play();
+                return;
+            }
+            reversing = false;
+            if (elapsed >= playingDuration)
+            {
+                Stop();
+                return;
+            }
+            StartClock();
+        }
+
+        /// <summary>Rewind a captured single cycle from its current pose.</summary>
+        public void PlayReverse()
+        {
+            if (!isActiveAndEnabled || active.Count == 0 || playingCycles != 1) return;
+            if (elapsed <= 0)
+            {
+                ResetPose();
+                return;
+            }
+            reversing = true;
+            StartClock();
+        }
+
+        private void StartClock()
+        {
+            if (IsPlaying) return;
+            IsPlaying = true;
             UpdateManager.RegisterUpdate(this, Tick);
         }
 
@@ -64,9 +103,22 @@ namespace UnscriptedEngine
         public void Advance(float seconds)
         {
             if (!IsPlaying || !isActiveAndEnabled || float.IsNaN(seconds) || float.IsInfinity(seconds)) return;
-            elapsed += Mathf.Max(0f, seconds);
+            float step = Mathf.Max(0f, seconds);
+            if (reversing)
+            {
+                elapsed -= step;
+                if (elapsed <= 0)
+                {
+                    ResetPose();
+                    completed.Invoke();
+                }
+                else Sample((float)(elapsed / playingDuration));
+                return;
+            }
+            elapsed += step;
             if (playingCycles > 0 && elapsed >= (double)playingDuration * playingCycles)
             {
+                elapsed = (double)playingDuration * playingCycles;
                 Sample(1f);
                 Stop();
                 completed.Invoke();

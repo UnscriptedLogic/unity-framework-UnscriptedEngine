@@ -106,7 +106,11 @@ namespace UnscriptedEngine.Audio
 
         /// <summary>Returns null for a missing clip or when the pooled voice limit is reached.</summary>
         public static AudioVoice Play(AudioClip clip, string category = AudioCategories.Misc, float volume = 1f,
-            bool loop = false, Vector3? position = null)
+            bool loop = false, Vector3? position = null) =>
+            Play(clip, category, volume, loop, position, hearingRange: 0f);
+
+        internal static AudioVoice Play(AudioClip clip, string category, float volume,
+            bool loop, Vector3? position, float hearingRange)
         {
             if (clip == null) return null;
             RegisterCategory(category);
@@ -126,6 +130,10 @@ namespace UnscriptedEngine.Audio
             source.clip = clip;
             source.loop = loop;
             source.spatialBlend = position.HasValue ? 1f : 0f;
+            bool useHearingRange = position.HasValue && hearingRange > 0f && !float.IsInfinity(hearingRange);
+            source.rolloffMode = useHearingRange ? AudioRolloffMode.Linear : AudioRolloffMode.Logarithmic;
+            source.minDistance = useHearingRange ? Mathf.Min(1f, hearingRange * 0.5f) : 1f;
+            source.maxDistance = useHearingRange ? hearingRange : 500f;
             source.ignoreListenerVolume = false;
             AudioVoice voice = new AudioVoice(source, category, volume, true);
             voices.Add(voice);

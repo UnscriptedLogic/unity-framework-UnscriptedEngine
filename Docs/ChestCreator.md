@@ -93,7 +93,7 @@ public class LockedChest : UChest
 }
 ```
 
-Use inspector **On Opened** for effects without a subclass. `InventoryOpenRequested` separates core storage from UI; custom presenters can subscribe/unsubscribe while enabled. Preserve base calls when overriding lifecycle methods. No new static runtime state is introduced.
+Wire effects to **On Opened** and **On Closed** in the Inspector. For a hinged lid, connect those events to `ObjectAnimBrain.PlayForward` and `PlayReverse` with a single-cycle Tween Rotate. The split-inventory presenter calls `UChest.TryClose()` when its panel is dismissed. Custom presenters and burst-open gameplay can call `TryClose()` when their open state ends.
 
 ### Custom recipe asset
 

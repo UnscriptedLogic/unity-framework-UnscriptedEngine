@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnscriptedEngine.Audio;
 using UnscriptedEngine.Settings;
@@ -33,6 +34,49 @@ namespace UnscriptedEngine.Tests
             finally
             {
                 voice?.Dispose();
+                UnityEngine.Object.DestroyImmediate(clip);
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator EventPlayerAwakeHearingRangeDoesNotLeakIntoReusedVoice()
+        {
+            GameObject host = new GameObject("Audio event test");
+            host.SetActive(false);
+            AudioClip clip = AudioClip.Create("Hearing range test", 44100, 1, 44100, false);
+            AudioEventPlayer player = host.AddComponent<AudioEventPlayer>();
+            const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic;
+            typeof(AudioEventPlayer).GetField("clip", fields).SetValue(player, clip);
+            typeof(AudioEventPlayer).GetField("hearingRange", fields).SetValue(player, 120f);
+            typeof(AudioEventPlayer).GetField("playOnAwake", fields).SetValue(player, true);
+            AudioSource source = null;
+            AudioVoice replacement = null;
+            try
+            {
+                host.SetActive(true);
+                source = Array.Find(UnityEngine.Object.FindObjectsByType<AudioSource>(),
+                    candidate => candidate.clip == clip);
+                Assert.IsNotNull(source);
+                Assert.AreEqual(1f, source.spatialBlend);
+                Assert.AreEqual(AudioRolloffMode.Linear, source.rolloffMode);
+                Assert.AreEqual(120f, source.maxDistance);
+
+                source.Stop();
+                yield return null;
+                yield return null;
+                Assert.IsNull(source.clip);
+
+                replacement = AudioRuntime.Play(clip, position: host.transform.position);
+                Assert.IsNotNull(replacement);
+                Assert.AreSame(clip, source.clip);
+                Assert.AreEqual(AudioRolloffMode.Logarithmic, source.rolloffMode);
+                Assert.AreEqual(500f, source.maxDistance);
+            }
+            finally
+            {
+                replacement?.Dispose();
+                if (source != null && source.clip == clip) source.Stop();
+                UnityEngine.Object.DestroyImmediate(host);
                 UnityEngine.Object.DestroyImmediate(clip);
             }
         }

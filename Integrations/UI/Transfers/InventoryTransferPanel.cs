@@ -4,7 +4,7 @@ using UnityEngine;
 namespace UnscriptedEngine.UI
 {
     /// <summary>Coordinates two inventory views and their transfer requests.</summary>
-    public sealed class InventoryTransferPanel : UCanvasComponent
+    public sealed class InventoryTransferPanel : InventoryPresenter
     {
         public override CanvasInputPolicy InputPolicy => CanvasInputPolicy.Modal;
         public override CanvasLayer Layer => CanvasLayer.Modal;
@@ -22,10 +22,13 @@ namespace UnscriptedEngine.UI
         public event Action<UInventoryComponent.OperationResult> TransferCompleted;
         public bool Displays(UInventoryComponent inventory) => inventory != null && container == inventory;
 
-        public void Open(UInventoryComponent playerInventory, UInventoryComponent containerInventory)
+        public override bool CanOpen(UInventoryComponent playerInventory, UInventoryComponent containerInventory) =>
+            playerView != null && containerView != null && playerView != containerView &&
+            playerInventory != null && containerInventory != null && playerInventory != containerInventory;
+
+        public override void Open(UInventoryComponent playerInventory, UInventoryComponent containerInventory)
         {
-            if (playerView == null || containerView == null || playerView == containerView
-                || playerInventory == null || containerInventory == null) return;
+            if (!CanOpen(playerInventory, containerInventory)) return;
             player = playerInventory;
             container = containerInventory;
             player.Initialize();
@@ -34,16 +37,16 @@ namespace UnscriptedEngine.UI
             playerView.Initialize(player, this);
             containerView.Initialize(container, this);
         }
-        public new void Close()
+        public override void Close()
         {
             if (playerView != null) playerView.Initialize(null);
             if (containerView != null) containerView.Initialize(null);
             player = null;
             container = null;
-            if (Controller != null) base.Close();
-            else gameObject.SetActive(false);
+            base.Close();
         }
         public override bool HandleBack() { Close(); return true; }
+
         public void Transfer(UInventoryComponent source, int sourceSlot, UInventoryComponent destination, int targetSlot, int quantity)
         {
             if (!isActiveAndEnabled || player == null || container == null

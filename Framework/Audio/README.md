@@ -33,6 +33,10 @@ Missing clips or exhausted pool return `null`. Use null-safe handle access. A ha
 
 Add **Unscripted Engine/Audio/Audio Event Player** to an object to trigger shared audio from Inspector events. Assign its clip, volume, and category (default: `sound-effects`). Positional playback defaults to 3D at the object's position when triggered; disable it for 2D audio.
 
+With **Positional** enabled, set **Hearing Range** to a positive distance in world units. The sound fades linearly to silence at that distance from the listener. Leave it at zero to use Unity's default 3D falloff. The range applies only to positional playback.
+
+For a spawned effect, put **Audio Event Player** on the VFX prefab and enable **Play On Awake**. In **One Shot Effect Player**, add the prefab to **Effect Prefabs**. Each trigger spawns every assigned prefab at the same position and rotation, then destroys the instances after **Effect Lifetime**. When migrating an older spawner, move its prefab into the list and copy its clip and volume to the prefab's audio component.
+
 For an interactable cube:
 
 1. Add `AudioEventPlayer` to the cube and assign the interaction clip.
@@ -170,7 +174,7 @@ sequenceDiagram
 - Do not write managed `AudioSource.volume` directly: it bypasses category multiplication until the next update from the handle/category.
 - Other code changing `AudioListener.volume` or `ignoreListenerVolume` can bypass this contract. Give shared runtime sole ownership of master volume.
 - No automatic inference from clip names, tags, hierarchy, or mixer groups. Explicit category IDs keep routing predictable and avoid expensive scans.
-- Pooled positional sounds stay at their starting world position, use Unity's default 3D attenuation, and persist across scene loads. Use bound sources for moving emitters or authored distances; stop persistent loops explicitly.
+- Pooled positional sounds stay at their starting world position and persist across scene loads. Use **Hearing Range** on `AudioEventPlayer` for a custom cutoff or bind an authored source for moving emitters. Stop persistent loops explicitly.
 - No scheduled playback, per-voice pause, fades, crossfades, ducking, priority stealing, async asset loading, network replication, or category hierarchy. Global `AudioListener.pause` is supported: paused pooled voices are retained.
 - One external source has one category, including all of its `PlayOneShot` sounds. Use separate sources/pooled calls for different categories.
 - Setting/UI/store behavior remains owned by the existing settings framework. This feature creates definitions, not a new UI text implementation.

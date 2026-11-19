@@ -1,16 +1,15 @@
+using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnscriptedEngine.Audio;
 
 namespace UnscriptedEngine
 {
     [AddComponentMenu("Unscripted Engine/Presentation/One Shot Effect Player")]
     public sealed class OneShotEffectPlayer : MonoBehaviour
     {
-        [SerializeField, Tooltip("Optional visual prefab. Leave empty for sound only.")] private GameObject effectPrefab;
+        [SerializeField, Tooltip("All assigned effect prefabs spawn together at the playback position and rotation.")]
+        private GameObject[] effectPrefabs = Array.Empty<GameObject>();
         [SerializeField, Min(0.01f)] private float effectLifetime = 5f;
-        [SerializeField, Tooltip("Optional spatial sound. Leave empty for visuals only.")] private AudioClip clip;
-        [SerializeField, Range(0f, 1f)] private float volume = 1f;
         [SerializeField, Tooltip("Play at this object when it is destroyed unless an explicit effect already played.")]
         private bool playOnDestroy;
         private bool played;
@@ -23,14 +22,15 @@ namespace UnscriptedEngine
             if (!Application.isPlaying || !scene.isLoaded) return;
             played = true;
 
-            if (effectPrefab != null)
+            float lifetime = Mathf.Max(0.01f, effectLifetime);
+            foreach (GameObject prefab in effectPrefabs)
             {
-                GameObject effect = Instantiate(effectPrefab, position, rotation);
+                if (prefab == null) continue;
+
+                GameObject effect = Instantiate(prefab, position, rotation);
                 SceneManager.MoveGameObjectToScene(effect, scene);
-                Destroy(effect, Mathf.Max(0.01f, effectLifetime));
+                Destroy(effect, lifetime);
             }
-            if (clip != null)
-                AudioRuntime.Play(clip, AudioCategories.SoundEffects, volume, position: position);
         }
 
         private void OnApplicationQuit() => played = true;

@@ -24,10 +24,10 @@ Stop freezes the current pose and cancels completion. ResetPose stops and restor
 
 | Effect | Composition | Trigger |
 | --- | --- | --- |
-| Chest opening | Punch Scale on a body pivot; separate Tween Rotate brain on lid hinge | Opening calls both Play methods; closing calls lid.ResetPose |
+| Chest lid | Tween Rotate on the lid hinge, Cycles = 1 | On Opened calls PlayForward; On Closed calls PlayReverse |
 | Processing machine | Wiggle Move + Wiggle Rotate, Cycles = 0 | Processing start calls Play; finish/cancel calls ResetPose |
 | Turret recoil | Punch Move + Punch Scale on barrel's rear pivot | Each shot calls Play; rapid shots safely restart |
 
-Example: `recoil.Play();` after a successful fire action, or `processing.ResetPose();` when processing ends. Keep those subscriptions in the gameplay adapter; the package has no knowledge of chests, machines, or weapons. Effects are not replicated; gameplay decides which clients trigger presentation.
+For a single-cycle effect, `PlayForward()` and `PlayReverse()` change direction from the current sample. A completed reverse restores the captured rest pose. Effects are local. Gameplay decides which clients trigger presentation.
 
 The sandbox's `Assets/Prototypes/Default/Experiments/Presentation/ObjectTweening/ObjectTweenDemo.unity` provides all three recipes with buttons. See its README for verification steps. Focused PlayMode tests are in Tests/ObjectAnimation; run with the host's package testables enabled. They include real disable callbacks, dispatcher registration, and scaled/unscaled playback while paused.

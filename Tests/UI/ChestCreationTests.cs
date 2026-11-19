@@ -66,6 +66,8 @@ namespace UnscriptedEngine.Tests
             {
                 InventoryTransferPanel panel = instance.GetComponentInChildren<InventoryTransferPanel>(true);
                 Assert.That(panel, Is.Not.Null);
+                var presenter = new SerializedObject(instance.GetComponent<ChestInventoryPresenter>());
+                Assert.That(presenter.FindProperty("panel").objectReferenceValue, Is.SameAs(panel));
                 Assert.That(panel.gameObject.activeSelf, Is.False);
                 foreach (GridLayoutGroup layout in panel.GetComponentsInChildren<GridLayoutGroup>(true))
                     Assert.That(layout.cellSize.x, Is.EqualTo(layout.cellSize.y));

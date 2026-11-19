@@ -21,6 +21,9 @@ namespace UnscriptedEngine
         [SerializeField]
         [Tooltip("Called after a successful open. Connect lid animation, audio or effects.")]
         private UnityEvent onOpened = new UnityEvent();
+        [SerializeField]
+        [Tooltip("Called when an opened chest closes. Connect lid animation, audio or effects.")]
+        private UnityEvent onClosed = new UnityEvent();
         [Header("Contents")]
         [SerializeField]
         [Tooltip("Exact contents, independent chance rolls, or a custom loot provider.")]
@@ -45,6 +48,8 @@ namespace UnscriptedEngine
         public ChestOpenMode OpenMode => openMode;
         public ChestContentsMode ContentsMode => contentsMode;
         public bool ContentsInitialized => contentsInitialized;
+        public bool IsOpen { get; private set; }
+        public UnityEvent OnClosed => onClosed;
         public UInventoryComponent Inventory => inventory != null ? inventory : inventory = GetComponent<UInventoryComponent>();
         public event Action<GameObject, UInventoryComponent> InventoryOpenRequested;
 
@@ -65,6 +70,7 @@ namespace UnscriptedEngine
                 interaction.OnButtonPressedServer -= HandleServerInteraction;
                 interaction.OnButtonPressedClient -= HandleClientInteraction;
             }
+            TryClose();
             base.OnDisable();
         }
 
@@ -102,6 +108,7 @@ namespace UnscriptedEngine
                     if (interactor == null || InventoryOpenRequested == null) return false;
                     InventoryOpenRequested.Invoke(interactor, Inventory);
                 }
+                IsOpen = true;
                 OnOpened(interactor);
                 onOpened.Invoke();
                 return true;
@@ -111,6 +118,15 @@ namespace UnscriptedEngine
 
         protected virtual bool CanOpen(GameObject interactor) => true;
         protected virtual void OnOpened(GameObject interactor) { }
+
+        /// <summary>End the local open state. Inventory presenters call this when dismissed.</summary>
+        public bool TryClose()
+        {
+            if (!IsOpen) return false;
+            IsOpen = false;
+            onClosed.Invoke();
+            return true;
+        }
 
         private bool HasContentsAuthority
         {

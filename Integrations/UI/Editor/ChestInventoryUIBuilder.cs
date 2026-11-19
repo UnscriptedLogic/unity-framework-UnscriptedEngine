@@ -9,7 +9,14 @@ namespace UnscriptedEngine.UI.Editor
     {
         internal static void Build(GameObject chest)
         {
-            GameObject canvasObject = Rect("Chest Inventory", chest.transform).gameObject;
+            InventoryTransferPanel panel = CreatePanel(chest.transform, "Chest Inventory", "Chest");
+            ChestInventoryPresenter presenter = chest.AddComponent<ChestInventoryPresenter>();
+            ChestCreation.SetObject(presenter, "panel", panel);
+        }
+
+        internal static InventoryTransferPanel CreatePanel(Transform parent, string name, string containerTitle)
+        {
+            GameObject canvasObject = Rect(name, parent).gameObject;
             Canvas canvas = canvasObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 50;
@@ -28,7 +35,7 @@ namespace UnscriptedEngine.UI.Editor
 
             GameObject slotTemplate = CreateSlotTemplate(canvasObject.transform);
             InventoryView player = CreateView("Player", frame, slotTemplate, new Vector2(0.02f, 0.12f), new Vector2(0.49f, 0.98f));
-            InventoryView container = CreateView("Chest", frame, slotTemplate, new Vector2(0.51f, 0.12f), new Vector2(0.98f, 0.98f));
+            InventoryView container = CreateView(containerTitle, frame, slotTemplate, new Vector2(0.51f, 0.12f), new Vector2(0.98f, 0.98f));
             ChestCreation.SetObject(panel, "playerView", player);
             ChestCreation.SetObject(panel, "containerView", container);
             RectTransform close = Rect("Close", frame, new Vector2(0.42f, 0.02f), new Vector2(0.58f, 0.1f));
@@ -38,9 +45,8 @@ namespace UnscriptedEngine.UI.Editor
             button.targetGraphic = close.GetComponent<Image>();
             Label("Close", close, Vector2.zero, Vector2.one);
             UnityEventTools.AddPersistentListener(button.onClick, panel.Close);
-            ChestInventoryPresenter presenter = chest.AddComponent<ChestInventoryPresenter>();
-            ChestCreation.SetObject(presenter, "panel", panel);
             canvasObject.SetActive(false);
+            return panel;
         }
 
         private static InventoryView CreateView(string title, Transform parent, GameObject slotTemplate, Vector2 minimum, Vector2 maximum)
