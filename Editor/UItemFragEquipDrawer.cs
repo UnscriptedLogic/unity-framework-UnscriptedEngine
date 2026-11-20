@@ -6,6 +6,11 @@ namespace UnscriptedEngine.Editor
     [CustomPropertyDrawer(typeof(UItemFragEquip))]
     public sealed class UItemFragEquipDrawer : PropertyDrawer
     {
+        private static readonly string[] LeftHandFields =
+        {
+            "leftHandVisualPrefab", "overrideLeftHandPose", "leftHandPosition", "leftHandRotation", "leftHandMirrorChildPath"
+        };
+
         private static float Gap => EditorGUIUtility.standardVerticalSpacing;
         private static float Line => EditorGUIUtility.singleLineHeight;
 
@@ -13,10 +18,13 @@ namespace UnscriptedEngine.Editor
         {
             if (!property.isExpanded) return Line;
 
-            return Line * 2 + Gap * 4
+            float height = Line * 2 + Gap * 4
                 + EditorGUI.GetPropertyHeight(property.FindPropertyRelative("visualPrefab"), true)
                 + EditorGUI.GetPropertyHeight(property.FindPropertyRelative("anchorPosition"), true)
                 + EditorGUI.GetPropertyHeight(property.FindPropertyRelative("anchorRotation"), true);
+            foreach (string field in LeftHandFields)
+                height += Gap + EditorGUI.GetPropertyHeight(property.FindPropertyRelative(field), true);
+            return height;
         }
 
         public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
@@ -49,6 +57,8 @@ namespace UnscriptedEngine.Editor
 
                 DrawField(ref row, property.FindPropertyRelative("anchorPosition"));
                 DrawField(ref row, property.FindPropertyRelative("anchorRotation"));
+                foreach (string field in LeftHandFields)
+                    DrawField(ref row, property.FindPropertyRelative(field));
 
                 EditorGUI.indentLevel = previousIndent;
             }

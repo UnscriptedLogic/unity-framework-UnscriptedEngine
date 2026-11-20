@@ -69,10 +69,14 @@ public class InventoryView : UCanvasComponent
             if (drag != null) drag.Bind(transferPanel, _inventory as UInventoryComponent, i);
             if (_slots[i] == null)
                 Debug.LogError("Inventory slot prefab requires InventorySlotView.", slot);
+            else
+                ConfigureSlot(_slots[i], i);
         }
 
         RefreshSlots();
     }
+
+    protected virtual void ConfigureSlot(InventorySlotView slot, int index) { }
 
     private void RefreshSlots()
     {

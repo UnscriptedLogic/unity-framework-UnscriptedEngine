@@ -13,6 +13,7 @@ namespace UnscriptedEngine.Input
             if (template == null) throw new ArgumentNullException(nameof(template));
             actions = UnityEngine.Object.Instantiate(template);
         }
+        public InputActionAsset Asset => actions;
         public InputActionMap FindMap(string name, bool required = true) => actions.FindActionMap(name, required);
         public void Dispose()
         {

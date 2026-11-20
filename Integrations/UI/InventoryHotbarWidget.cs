@@ -17,7 +17,8 @@ namespace UnscriptedEngine.UI
         private readonly List<InventoryHotbarSlotWidget> cells = new();
         private InventoryHotbarSlotWidget builtPrefab;
         private InventoryHotbarSlotWidget lastSlotPrefab;
-        private int lastSelection = -2;
+        private ItemEquipComponent[] hands;
+        private int[] lastHandSlots;
         private int lastSlotCount;
         public override bool Focusable => false;
         public int SlotCount => Mathf.Max(1, slotCount);
@@ -37,6 +38,8 @@ namespace UnscriptedEngine.UI
             inventory = source;
             inventoryComponent = source as Component;
             equipment = selectedEquipment;
+            hands = equipment != null ? equipment.GetComponents<ItemEquipComponent>() : null;
+            lastHandSlots = hands != null ? new int[hands.Length] : null;
             if (isActiveAndEnabled && inventory != null) inventory.Changed += Refresh;
             Refresh();
         }
@@ -66,10 +69,16 @@ namespace UnscriptedEngine.UI
         private void LateUpdate()
         {
             if (lastSlotCount != SlotCount || lastSlotPrefab != slotPrefab || (!HasInventory && VisibleSlotCount != 0)) Refresh();
-            if (lastSelection != SelectedSlot) RefreshSelection();
+            if (hands == null) return;
+            for (int i = 0; i < hands.Length; i++)
+                if (lastHandSlots[i] != SelectedSlot(hands[i]))
+                {
+                    RefreshSelection();
+                    break;
+                }
         }
 
-        private int SelectedSlot => equipment != null && equipment.Inventory == inventory ? equipment.SelectedSlotIndex : -1;
+        private int SelectedSlot(ItemEquipComponent hand) => hand != null && hand.Inventory == inventory ? hand.SelectedSlotIndex : -1;
 
         public void Refresh()
         {
@@ -117,9 +126,19 @@ namespace UnscriptedEngine.UI
 
         private void RefreshSelection()
         {
-            lastSelection = SelectedSlot;
             for (int i = 0; i < VisibleSlotCount; i++)
-                cells[i].SetSelected(i == lastSelection);
+            {
+                cells[i].SetSelected(i == SelectedSlot(equipment));
+                cells[i].SetHandNumber(0);
+            }
+
+            if (hands == null) return;
+            for (int i = 0; i < hands.Length; i++)
+            {
+                int slot = lastHandSlots[i] = SelectedSlot(hands[i]);
+                if (hands.Length > 1 && slot >= 0 && slot < VisibleSlotCount)
+                    cells[slot].SetHandNumber(i + 1);
+            }
         }
 
         public static InventoryHotbarWidget CreateDefault(Transform parent)

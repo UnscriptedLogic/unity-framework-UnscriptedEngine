@@ -4,6 +4,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
+using UnscriptedEngine.Input;
 using UnscriptedEngine.Settings;
 
 namespace UnscriptedEngine.UI
@@ -12,6 +13,11 @@ namespace UnscriptedEngine.UI
     [AddComponentMenu("")]
     public sealed class DebugOverlayDriver : MonoBehaviour
     {
+        private static readonly LocalInputShortcuts Shortcuts = new("debug-overlay", "Debug Overlay");
+        private static readonly InputAction ToggleOverlay = Shortcuts.AddButton("ToggleOverlay", "<Keyboard>/f3", "keyboard");
+        private static readonly InputAction TogglePinnedEntity = Shortcuts.AddButton("TogglePinnedEntity", "<Keyboard>/f4", "keyboard");
+        private IDisposable shortcutLease;
+
         private readonly StringBuilder left = new StringBuilder(512);
         private readonly StringBuilder right = new StringBuilder(512);
         private IDisposable registration;
@@ -34,6 +40,7 @@ namespace UnscriptedEngine.UI
 
         private void OnEnable()
         {
+            shortcutLease ??= Shortcuts.Acquire();
             List<SettingDefinition> definitions = new List<SettingDefinition>(DebugEntities.Definitions);
             definitions.Add(DebugOverlay.VisibleSetting);
             definitions.Add(ColliderZoneDebugDisplay.VisibleSetting);
@@ -44,9 +51,10 @@ namespace UnscriptedEngine.UI
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.f3Key.wasPressedThisFrame)
+            if (InputBindingCapture.BlocksInput) return;
+            if (ToggleOverlay.WasPressedThisFrame())
                 SettingsRuntime.Service.TrySet(DebugOverlay.VisibleSetting, !DebugOverlay.IsVisible);
-            if (DebugOverlay.IsVisible && Keyboard.current != null && Keyboard.current.f4Key.wasPressedThisFrame &&
+            if (DebugOverlay.IsVisible && TogglePinnedEntity.WasPressedThisFrame() &&
                 SettingsRuntime.Service.Get(DebugEntities.InspectSetting))
             {
                 entityDisplay?.UpdateTarget();
@@ -158,6 +166,8 @@ namespace UnscriptedEngine.UI
 
         private void OnDisable()
         {
+            shortcutLease?.Dispose();
+            shortcutLease = null;
             zoneDisplay.Dispose();
             visibilitySubscription?.Dispose();
             visibilitySubscription = null;

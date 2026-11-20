@@ -40,7 +40,13 @@ namespace UnscriptedEngine.UI
                     if (fragment is UItemFragDetails details && !string.IsNullOrWhiteSpace(details.Name)) { name = details.Name; break; }
             if (itemNameText != null) itemNameText.text = name;
             if (quantityText != null) quantityText.text = item != null ? slot.Quantity.ToString() : string.Empty;
-            if (slotNumberText != null) slotNumberText.text = (index + 1).ToString();
+            SetHandNumber(0);
+        }
+
+        public void SetHandNumber(int handNumber)
+        {
+            if (slotNumberText != null)
+                slotNumberText.text = handNumber > 0 ? $"{SlotIndex + 1} · H{handNumber}" : (SlotIndex + 1).ToString();
         }
 
         public virtual void SetSelected(bool selected)

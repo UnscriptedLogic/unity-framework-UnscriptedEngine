@@ -1,6 +1,6 @@
 {
   "name": "UnscriptedEngine.DebugUI",
-  "references": ["UnscriptedEngine", "UnityEngine.UI", "Unity.InputSystem"],
+  "references": ["UnscriptedEngine", "UnscriptedEngine.InputSystem", "UnityEngine.UI", "Unity.InputSystem"],
   "defineConstraints": ["UNSCRIPTED_UGUI", "UNSCRIPTED_INPUT_SYSTEM"],
   "versionDefines": [
     {"name":"com.unity.ugui","expression":"2.0.0","define":"UNSCRIPTED_UGUI"},

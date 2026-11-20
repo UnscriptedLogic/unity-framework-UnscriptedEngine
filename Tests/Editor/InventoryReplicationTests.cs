@@ -158,6 +158,12 @@ namespace UnscriptedEngine.Tests
             handAnchor.SetParent(cameraRig.transform, false);
             handAnchor.localPosition = new Vector3(0.2f, 0.4f, 0.5f);
             Set(equipment, "equipAnchor", handAnchor);
+            var offHand = pawnObject.AddComponent<TestItemEquipComponent>();
+            Set(offHand, "inventoryComponent", inventory);
+            Set(offHand, "startEmpty", true);
+            var offHandAnchor = new GameObject("Off-hand anchor").transform;
+            offHandAnchor.SetParent(cameraRig.transform, false);
+            Set(offHand, "equipAnchor", offHandAnchor);
             Set(pawnObject.AddComponent<DisableOnProxy>(), "targets", new[] { cameraRig });
             var pawnPrefab = PrefabUtility.SaveAsPrefabAsset(pawnObject, folder + "/Owner.prefab");
             Object.DestroyImmediate(pawnObject);
@@ -195,8 +201,32 @@ namespace UnscriptedEngine.Tests
                 Assert.That(WorldCount(server), Is.Zero);
                 Assert.That(serverInventory.TrySplitStack(0, 1).Success, Is.True);
                 yield return Wait(() => clientInventory.Items.Count == 2, "Split replication");
+                ItemEquipComponent serverOffHand = owner.GetComponents<ItemEquipComponent>()[1];
+                ItemEquipComponent clientOffHand = replica.GetComponents<ItemEquipComponent>()[1];
+                Assert.That(clientOffHand.SelectedSlotIndex, Is.EqualTo(-1));
+                Assert.That(serverOffHand.SelectSlot(0), Is.False, "The main hand owns slot 0.");
+                Assert.That(clientOffHand.SelectSlot(1), Is.True);
+                yield return Wait(() => clientOffHand.HeldNetworkSession != 0, "Off-hand session");
+                Assert.That(clientOffHand.Use("primary", true), Is.True);
+                yield return Wait(() => IsOn(serverOffHand) && IsOn(clientOffHand), "Off-hand use replication");
+                Assert.That(IsOn(clientEquipment), Is.False, "Using the off hand must leave the main hand alone.");
+                Assert.That(clientEquipment.TrySwapHeldItems(clientOffHand), Is.True);
+                yield return Wait(() => clientEquipment.SelectedSlotIndex == 1 && clientOffHand.SelectedSlotIndex == 0,
+                    "Both occupied hands swapped");
+                Assert.That(clientEquipment.TrySwapHeldItems(clientOffHand), Is.True);
+                yield return Wait(() => clientEquipment.SelectedSlotIndex == 0 && clientOffHand.SelectedSlotIndex == 1,
+                    "Both occupied hands restored");
+                Assert.That(clientOffHand.SelectSlot(-1), Is.True);
+                yield return Wait(() => clientOffHand.SelectedSlotIndex == -1, "Off-hand cleared");
+                Assert.That(clientEquipment.TrySwapHeldItems(clientOffHand), Is.True);
+                yield return Wait(() => clientEquipment.SelectedSlotIndex == -1 && clientOffHand.SelectedSlotIndex == 0,
+                    "Main item moved to empty off hand");
+                Assert.That(clientEquipment.TrySwapHeldItems(clientOffHand), Is.True);
+                yield return Wait(() => clientEquipment.SelectedSlotIndex == 0 && clientOffHand.SelectedSlotIndex == -1,
+                    "Off-hand item moved back to main hand");
                 Assert.That(clientEquipment.SelectSlot(1), Is.True);
                 yield return Wait(() => owner.GetComponent<ItemEquipComponent>().SelectedSlotIndex == 1, "Selected slot replication");
+                yield return Wait(() => clientEquipment.SelectedSlotIndex == 1, "Owner sees selected slot");
                 Assert.That(clientEquipment.Drop(Vector3.forward), Is.True);
                 yield return Wait(() => Total(clientInventory) == 1 && WorldCount(client) == 1, "Client drop transfer");
                 Assert.That(Total(serverInventory), Is.EqualTo(1));

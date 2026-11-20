@@ -13,6 +13,10 @@ public class ItemEquipComponent : UObjectComponent
     [SerializeField, Tooltip("Parent transform for held visuals. Uses this transform when unassigned.")]
     private Transform equipAnchor;
 
+    [SerializeField] private bool startEmpty;
+    [SerializeField, Tooltip("Mirror the item pose across the anchor's local YZ plane and use any left-hand visual overrides.")]
+    private bool mirrorHeldPose;
+
     [Header("Dropping")]
     [SerializeField] private Transform dropOrigin;
     [SerializeField] private Vector3 dropOffset = new Vector3(0f, 0.5f, 0.75f);
@@ -23,6 +27,9 @@ public class ItemEquipComponent : UObjectComponent
     private bool debug;
 
     private IInventory inventory;
+    private ItemEquipComponent[] hands;
+
+
     private bool observingInventory;
     private GameObject heldVisual;
     private ItemDataSO heldItem;
@@ -90,14 +97,17 @@ public class ItemEquipComponent : UObjectComponent
 
     private void ApplySelectedSlot(int previous, int current)
     {
+        if (SelectedSlotIndex == current) return;
         SelectedSlotIndex = current;
         RefreshHeldItem();
     }
 
     public IInventory Inventory => inventory;
-    public int SelectedSlotIndex { get; private set; } = -1;
+    public int SelectedSlotIndex { get; private set; }
     public int VisibleSlotCount => IsInventoryAvailable()
         ? Mathf.Min(Mathf.Max(0, hotbarSize), Mathf.Max(0, inventory.InventorySize)) : 0;
+    public uint HeldRevision { get; private set; }
+    public uint HeldNetworkSession => IsUseSessionReady() ? behaviourState.Value.Session : 0;
     public ItemDataSO HeldItem => heldItem;
     public GameObject HeldVisual => heldVisual;
     /// <summary>Raised after the held item, visual, or selected held slot changes, including unequip.</summary>
@@ -217,7 +227,7 @@ public class ItemEquipComponent : UObjectComponent
     {
         if (!isActiveAndEnabled || !CanTick || refreshing || clearing || string.IsNullOrEmpty(action)) return false;
         if (IsSpawned && !IsServer && !IsOwner) return false;
-        if (heldBehaviour == null) return false;
+        if (heldBehaviour == null || (pressed && !heldBehaviour.CanStartUse(action))) return false;
         if (!heldBehaviour.ReplicatesState) return heldBehaviour.Use(action, pressed);
         if (!heldBehaviour.HandlesAction(action) || System.Text.Encoding.UTF8.GetByteCount(action) > 61) return false;
         if (IsSpawned && !IsServer)
@@ -261,7 +271,12 @@ public class ItemEquipComponent : UObjectComponent
             || inventory is not UInventoryComponent source || !source.IsSpawned
             || source.OwnerClientId != rpc.Receive.SenderClientId) return;
         if (cancel) heldBehaviour.CancelUse();
-        else if (heldBehaviour.HandlesAction(action.ToString())) heldBehaviour.Use(action.ToString(), pressed);
+        else
+        {
+            string actionName = action.ToString();
+            if (heldBehaviour.HandlesAction(actionName) && (!pressed || heldBehaviour.CanStartUse(actionName)))
+                heldBehaviour.Use(actionName, pressed);
+        }
         PublishBehaviourState();
     }
 
@@ -319,6 +334,8 @@ public class ItemEquipComponent : UObjectComponent
 
     protected override void OnEnable()
     {
+        if (hands == null && startEmpty) SelectedSlotIndex = -1;
+        hands = GetComponents<ItemEquipComponent>();
         base.OnEnable();
         Log("Enabled; observing inventory.");
         
@@ -376,7 +393,7 @@ public class ItemEquipComponent : UObjectComponent
         inventory = newInventory;
         inventoryComponent = newInventory as Component;
         if (debug) Log($"Inventory assigned: {newInventory}.");
-        SelectedSlotIndex = -1;
+        SelectedSlotIndex = startEmpty ? -1 : 0;
         ClearHeldVisual();
         if (!isActiveAndEnabled) return;
         ObserveInventory();
@@ -409,14 +426,67 @@ public class ItemEquipComponent : UObjectComponent
         Log("Stopped observing inventory.");
     }
 
+    private bool AllowsEmptySelection => startEmpty || hands?.Length > 1;
+
+    public bool TrySwapHeldItems(ItemEquipComponent other)
+    {
+        if (!CanSwapWith(other)) return false;
+        if (IsSpawned && !IsServer)
+        {
+            if (!IsOwner) return false;
+            RequestSwapRpc(other);
+            return true;
+        }
+
+        int thisSlot = other.GetSelectedItem() != null ? other.SelectedSlotIndex : -1;
+        int otherSlot = GetSelectedItem() != null ? SelectedSlotIndex : -1;
+        if ((thisSlot < 0 && otherSlot < 0) || thisSlot >= VisibleSlotCount || otherSlot >= other.VisibleSlotCount)
+            return false;
+
+        // Assign both before either equipment session is rebuilt.
+        SelectedSlotIndex = thisSlot;
+        other.SelectedSlotIndex = otherSlot;
+        RefreshHeldItem();
+        other.RefreshHeldItem();
+        return true;
+    }
+
+    private bool CanSwapWith(ItemEquipComponent other) => other != null && other != this
+        && other.gameObject == gameObject && other.IsSpawned == IsSpawned
+        && isActiveAndEnabled && other.isActiveAndEnabled && !refreshing && !clearing
+        && !other.refreshing && !other.clearing && IsInventoryAvailable() && Inventory == other.Inventory;
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Owner)]
+    private void RequestSwapRpc(NetworkBehaviourReference hand)
+    {
+        if (hand.TryGet(out ItemEquipComponent other, NetworkManager)) TrySwapHeldItems(other);
+    }
+
+    public bool CanSelectSlot(int slotIndex)
+    {
+        if (slotIndex < (AllowsEmptySelection ? -1 : 0) || slotIndex >= VisibleSlotCount) return false;
+        if (slotIndex == -1) return true;
+        if (hands == null) return false;
+        foreach (ItemEquipComponent hand in hands)
+            if (hand != this && hand.Inventory == Inventory && hand.SelectedSlotIndex == slotIndex)
+                return false;
+        return true;
+    }
+
     public bool SelectSlot(int slotIndex)
     {
         if (IsSpawned && !IsServer && !IsOwner) return false;
-        if (refreshing || clearing || !isActiveAndEnabled || slotIndex < 0 || slotIndex >= VisibleSlotCount)
+        if (refreshing || clearing || !isActiveAndEnabled || slotIndex < (AllowsEmptySelection ? -1 : 0) || slotIndex >= VisibleSlotCount)
         {
             if (debug) Log($"Selection rejected: slot {slotIndex}, available slots {VisibleSlotCount}, active {isActiveAndEnabled}.");
             return false;
         }
+        if (hands.Length > 1 && IsSpawned && !IsServer)
+        {
+            SelectSlotRpc(slotIndex);
+            return true;
+        }
+        if (!CanSelectSlot(slotIndex)) return false;
         if (debug) Log($"Selecting slot {slotIndex}; previous slot {SelectedSlotIndex}.");
         if (IsSpawned && !IsServer && SelectedSlotIndex != slotIndex)
         {
@@ -460,11 +530,14 @@ public class ItemEquipComponent : UObjectComponent
     {
         int slotCount = VisibleSlotCount;
         if (debug) Log($"Refreshing held item; selected slot {SelectedSlotIndex}, available slots {slotCount}.");
-        SelectedSlotIndex = slotCount == 0 ? -1 : Mathf.Clamp(SelectedSlotIndex, 0, slotCount - 1);
+        SelectedSlotIndex = slotCount == 0 || (AllowsEmptySelection && (SelectedSlotIndex < 0 || SelectedSlotIndex >= slotCount))
+            ? -1 : Mathf.Clamp(SelectedSlotIndex, 0, slotCount - 1);
         if (IsSpawned && IsServer) selectedSlot.Value = SelectedSlotIndex;
         ItemDataSO item = GetSelectedItem();
+        UItemFragEquip fragment = item != null ? FindEquipFragment(item) : null;
+        GameObject visualPrefab = fragment?.GetVisualPrefab(mirrorHeldPose);
         if (item != null && item == heldItem && heldSlotIndex == SelectedSlotIndex
-            && (heldVisual != null || FindEquipFragment(item)?.VisualPrefab == null)) return;
+            && (heldVisual != null || visualPrefab == null)) return;
         ClearHeldVisual();
         if (!IsSpawned || IsServer)
         {
@@ -472,13 +545,11 @@ public class ItemEquipComponent : UObjectComponent
             if (equipmentSession == 0) equipmentSession++;
         }
         if (!isActiveAndEnabled || item == null) return;
-        UItemFragEquip fragment = FindEquipFragment(item);
-        if (fragment != null && fragment.VisualPrefab != null)
+        if (visualPrefab != null)
         {
             Transform anchor = GetVisualAnchor();
-            heldVisual = Instantiate(fragment.VisualPrefab, anchor, false);
-            heldVisual.transform.localPosition = fragment.AnchorPosition;
-            heldVisual.transform.localRotation = Quaternion.Euler(fragment.AnchorRotation);
+            heldVisual = Instantiate(visualPrefab, anchor, false);
+            fragment.ApplyVisualPose(heldVisual.transform, mirrorHeldPose);
         }
         heldItem = item;
         heldSlotIndex = SelectedSlotIndex;
@@ -545,6 +616,7 @@ public class ItemEquipComponent : UObjectComponent
     private void ClearHeldVisualInternal()
     {
         // Detach first: callbacks can disable/destroy this component recursively.
+        HeldRevision++;
         ItemBehaviour behaviour = heldBehaviour;
         queuedUse.Clear();
         networkUsePending = false;

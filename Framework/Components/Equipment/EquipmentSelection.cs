@@ -14,7 +14,17 @@ namespace UnscriptedEngine
             int count = equipment.VisibleSlotCount;
             if (count == 0) return;
             int index = equipment.SelectedSlotIndex;
-            equipment.SelectSlot(index < 0 ? 0 : (index + (delta > 0 ? -1 : 1) + count) % count);
+            int step = delta > 0 ? -1 : 1;
+            if (index < 0) index = step > 0 ? count - 1 : 0;
+            for (int i = 0; i < count; i++)
+            {
+                index = (index + step + count) % count;
+                if (equipment.CanSelectSlot(index))
+                {
+                    equipment.SelectSlot(index);
+                    return;
+                }
+            }
         }
     }
 }

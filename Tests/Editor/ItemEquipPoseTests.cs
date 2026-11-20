@@ -79,6 +79,31 @@ namespace UnscriptedEngine.Tests
         }
 
         [Test]
+        public void MirroredHandReflectsPositionAndRotation()
+        {
+            Vector3 position = new Vector3(0.35f, -0.3f, 0.1f);
+            Vector3 angles = new Vector3(20f, 35f, -15f);
+            using (SerializedObject serialized = new SerializedObject(item))
+                ItemEquipPosePresets.ApplyPose(serialized.FindProperty("fragments").GetArrayElementAtIndex(0), position, angles);
+
+            var visual = new GameObject("Held visual");
+            try
+            {
+                var fragment = (UItemFragEquip)item.fragments[0];
+                fragment.ApplyVisualPose(visual.transform, true);
+                Assert.That(visual.transform.localPosition, Is.EqualTo(new Vector3(-position.x, position.y, position.z)));
+                Vector3 forward = Quaternion.Euler(angles) * Vector3.forward;
+                forward.x = -forward.x;
+                Assert.That(Vector3.Distance(visual.transform.localRotation * Vector3.forward, forward), Is.LessThan(0.0001f));
+                Assert.That(visual.transform.localScale, Is.EqualTo(Vector3.one));
+            }
+            finally
+            {
+                Object.DestroyImmediate(visual);
+            }
+        }
+
+        [Test]
         public void ApplyingPresetCopiesValuesWithoutLiveLink()
         {
             ItemEquipPosePresets.instance.SavePose(ItemHandPreset.LeftHand, Vector3.left, Vector3.forward);

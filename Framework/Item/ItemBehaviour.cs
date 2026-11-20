@@ -8,6 +8,8 @@ namespace UnscriptedEngine.Item
         public virtual void FixedTick(float deltaTime) { }
         /// <summary>Return true when this behaviour handles the action.</summary>
         public virtual bool Use(string action, bool pressed) => false;
+        /// <summary>Check whether a fresh press can be accepted without changing gameplay state.</summary>
+        public virtual bool CanStartUse(string action) => true;
         /// <summary>Opt in to server-only Use and replicated session state.</summary>
         public virtual bool ReplicatesState => false;
         /// <summary>Side-effect-free input consumption check for replicated behaviours.</summary>

@@ -20,11 +20,14 @@ namespace UnscriptedEngine.UI.Settings
         [SerializeField]
         [Tooltip("Optional TextMeshPro empty-state prefab for custom layouts.")]
         private TMPro.TMP_Text emptyStatePrefab;
+        [SerializeField, Tooltip("Group paths that start collapsed. Search still expands matching groups.")]
+        private string[] initiallyCollapsedGroups = Array.Empty<string>();
         private ISettingsValueSource service;
         private bool usesPreferences = true;
         private string search = "";
         private bool showAdvanced;
         private bool dirty;
+        private Func<SettingsGroup, int> groupPriority;
         private readonly Dictionary<string, bool> collapsed = new Dictionary<string, bool>(StringComparer.Ordinal);
         private readonly List<GameObject> generated = new List<GameObject>();
 
@@ -68,6 +71,13 @@ namespace UnscriptedEngine.UI.Settings
         public void SetSearch(string value) { search = value ?? ""; Refresh(); }
         public void SetShowAdvanced(bool value) { showAdvanced = value; Refresh(); }
         public void Refresh() => dirty = true;
+
+        /// <summary>Show preferred groups first and start lower-priority groups collapsed.</summary>
+        public void SetGroupPriority(Func<SettingsGroup, int> priority)
+        {
+            groupPriority = priority;
+            Refresh();
+        }
 
         private void CreateTemplateLayout()
         {
@@ -166,19 +176,33 @@ namespace UnscriptedEngine.UI.Settings
             RectTransform root = SettingsTemplateUI.Rect(group.DisplayName, parent);
             SettingsTemplateUI.Vertical(root, 4);
             bool isCollapsed = string.IsNullOrWhiteSpace(search) &&
-                collapsed.TryGetValue(group.Path, out bool previouslyCollapsed) && previouslyCollapsed;
+                (collapsed.TryGetValue(group.Path, out bool previouslyCollapsed)
+                    ? previouslyCollapsed : Array.IndexOf(initiallyCollapsedGroups, group.Path) >= 0 || GetGroupPriority(group) > 0);
             Button header = groupHeaderPrefab != null ? Instantiate(groupHeaderPrefab, root) :
                 SettingsTemplateUI.Button(root, GetGroupCaption(group, isCollapsed));
             SetGroupCaption(header, GetGroupCaption(group, isCollapsed));
             RectTransform body = SettingsTemplateUI.Rect("Body", root);
             SettingsTemplateUI.Vertical(body, 8);
-            CreateSettingRows(group, body);
-            foreach (SettingsGroup child in group.Children.OrderBy(item => item.DisplayName, StringComparer.Ordinal))
-                if (HasVisibleSettings(child)) CreateGroup(child, body);
+            bool populated = false;
+            void PopulateBody()
+            {
+                if (populated) return;
+                populated = true;
+                CreateSettingRows(group, body);
+                foreach (SettingsGroup child in group.Children.OrderBy(GetGroupPriority).ThenBy(item => item.DisplayName, StringComparer.Ordinal))
+                    if (HasVisibleSettings(child)) CreateGroup(child, body);
+            }
+            if (!isCollapsed) PopulateBody();
             body.gameObject.SetActive(!isCollapsed);
-            header.onClick.AddListener(() => ToggleGroup(group, body, header));
+            header.onClick.AddListener(() =>
+            {
+                ToggleGroup(group, body, header);
+                if (body.gameObject.activeSelf) PopulateBody();
+            });
             return root;
         }
+
+        private int GetGroupPriority(SettingsGroup group) => groupPriority?.Invoke(group) ?? 0;
 
         private void CreateSettingRows(SettingsGroup group, Transform parent)
         {
