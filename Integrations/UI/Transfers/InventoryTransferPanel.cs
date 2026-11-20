@@ -47,6 +47,18 @@ namespace UnscriptedEngine.UI
         }
         public override bool HandleBack() { Close(); return true; }
 
+        public override bool HandleInput(PlayerInputEvent input)
+        {
+            if (!IsFocused || input is not PlayerActionInputEvent action ||
+                !action.IsPerformed || !action.IsPressed || action.IsSynthetic ||
+                !string.Equals(action.ActionKey, Controller?.InteractAction, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            input.Cancel();
+            Close();
+            return true;
+        }
+
         public void Transfer(UInventoryComponent source, int sourceSlot, UInventoryComponent destination, int targetSlot, int quantity)
         {
             if (!isActiveAndEnabled || player == null || container == null

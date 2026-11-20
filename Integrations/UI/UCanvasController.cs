@@ -37,6 +37,7 @@ namespace UnscriptedEngine.UI
         private readonly List<Binding> bindings = new();
 
         public string BackAction { get; set; }
+        public string InteractAction { get; set; }
         public string NextWidgetAction { get; set; }
         public string PreviousWidgetAction { get; set; }
 
