@@ -16,6 +16,18 @@ namespace Framework.Components
     {
         private const int MaximumBlockCount = 10000;
 
+        /// <summary>Tree geometry for one generated instance. Appearance and collider settings belong to the prefab.</summary>
+        public struct ShapeSettings
+        {
+            public float Height, SizeDropOff, Curve, CurveFrequency, Slump;
+            public Vector2 Width, BlockLength;
+            public float BranchesPerTrunkDistance, BranchLength, BranchCurve, BranchCurveFrequency, BranchSlump;
+            public Vector2 BranchBlockLength, BranchBlockScale;
+            public float BranchSizeDropOff, BranchSplitChance, BranchSplitAngle, BranchLevelLengthScale;
+            public int BranchLevels, LeafBlocksPerTip;
+            public Vector2 LeafBlockWidth, LeafBlockHeight, LeafBlockDepth;
+        }
+
         [Header("Appearance")]
         [Tooltip("Shared material for every trunk block. Leave empty to use Unity's default primitive material.")]
         [SerializeField] private Material trunkMaterial;
@@ -120,6 +132,13 @@ namespace Framework.Components
 
         private void OnValidate()
         {
+            ValidateSettings();
+            // Update performs hierarchy changes outside Unity's validation callback.
+            rebuildRequested = autoUpdate;
+        }
+
+        private void ValidateSettings()
+        {
             height = Mathf.Max(0.001f, height);
             ValidateRange(ref width, ref previousWidth);
             ValidateRange(ref blockLength, ref previousBlockLength);
@@ -130,8 +149,6 @@ namespace Framework.Components
             trunkLayer = Mathf.Clamp(trunkLayer, 0, 31);
             ValidateBranches();
             ValidateLeaves();
-            // Update performs hierarchy changes outside Unity's validation callback.
-            rebuildRequested = autoUpdate;
         }
 
         private void Update()
@@ -183,6 +200,37 @@ namespace Framework.Components
             ValidateRange(ref leafBlockWidth, ref previousLeafBlockWidth);
             ValidateRange(ref leafBlockHeight, ref previousLeafBlockHeight);
             ValidateRange(ref leafBlockDepth, ref previousLeafBlockDepth);
+        }
+
+        /// <summary>Set the instance's shape and seed before rebuilding its owned tree geometry.</summary>
+        public void Generate(ShapeSettings shape, int instanceSeed)
+        {
+            height = shape.Height;
+            width = shape.Width;
+            sizeDropOff = shape.SizeDropOff;
+            blockLength = shape.BlockLength;
+            curve = shape.Curve;
+            curveFrequency = shape.CurveFrequency;
+            slump = shape.Slump;
+            branchesPerTrunkDistance = shape.BranchesPerTrunkDistance;
+            branchLength = shape.BranchLength;
+            branchCurve = shape.BranchCurve;
+            branchCurveFrequency = shape.BranchCurveFrequency;
+            branchSlump = shape.BranchSlump;
+            branchBlockLength = shape.BranchBlockLength;
+            branchBlockScale = shape.BranchBlockScale;
+            branchSizeDropOff = shape.BranchSizeDropOff;
+            branchSplitChance = shape.BranchSplitChance;
+            branchSplitAngle = shape.BranchSplitAngle;
+            branchLevels = shape.BranchLevels;
+            branchLevelLengthScale = shape.BranchLevelLengthScale;
+            leafBlocksPerTip = shape.LeafBlocksPerTip;
+            leafBlockWidth = shape.LeafBlockWidth;
+            leafBlockHeight = shape.LeafBlockHeight;
+            leafBlockDepth = shape.LeafBlockDepth;
+            seed = instanceSeed;
+            ValidateSettings();
+            Generate();
         }
 
         [ContextMenu("Generate Tree")]

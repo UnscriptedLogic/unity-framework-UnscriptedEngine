@@ -22,6 +22,7 @@ namespace UnscriptedEngine
             public bool JumpPressed;
             public Vector3 ExternalVelocityChange;
             public Vector3 SupportDisplacement;
+            public bool AttachedToSupport;
             public bool IsFlying;
 
             public bool Equals(CharacterMoveInput other)
@@ -35,6 +36,7 @@ namespace UnscriptedEngine
                     && BodyYaw.Equals(other.BodyYaw)
                     && ExternalVelocityChange.Equals(other.ExternalVelocityChange)
                     && SupportDisplacement.Equals(other.SupportDisplacement)
+                    && AttachedToSupport == other.AttachedToSupport
                     && JumpPressed == other.JumpPressed
                     && IsFlying == other.IsFlying;
             }
@@ -148,8 +150,12 @@ namespace UnscriptedEngine
         [SerializeField] private bool followMovingGround = true;
         [SerializeField, Min(0f)] private float maximumGroundCarryPerStep = 5f;
         private Transform groundSupport;
+        private Gameplay.MovementAttachmentZone movementAttachment;
+        private Pose movementFramePose;
+        private Rigidbody groundSupportBody;
         private Vector3 supportLocalPoint, supportWorldPoint;
         private Transform contactedSupport;
+        private Rigidbody contactedSupportBody;
         private bool collectingGround;
         private CharacterController characterController;
         private CharacterMoveInput[] inputBuffer;
@@ -172,6 +178,8 @@ namespace UnscriptedEngine
         private float proxySyncSuppressedUntil;
         private Vector3 previousFixedPosition;
         private Vector3 currentFixedPosition;
+        private Vector3 fixedFrameDisplacement;
+        private bool hasFixedFrameSample;
         private bool hasFixedPositionSamples;
         private bool hasInterpolatedTransform;
 
@@ -395,7 +403,7 @@ namespace UnscriptedEngine
                 // Notify gameplay only for a fresh owner step, never during replay.
                 if (collisionRetention < 1f)
                     HorizontalCollisionSpeedReduced?.Invoke(collisionRetention);
-                StoreFixedPositionSample(positionBeforeMove, transform.position);
+                StoreFixedPositionSample(positionBeforeMove, transform.position, input);
                 StoreState(CaptureState(input.Tick));
 
                 if (IsServer)
@@ -459,13 +467,14 @@ namespace UnscriptedEngine
                 BodyYaw = transform.eulerAngles.y,
                 JumpPressed = jumpQueued,
                 ExternalVelocityChange = pendingExternalVelocityChange,
-                SupportDisplacement = GetSupportDisplacement(),
                 IsFlying = isFlying
             };
 
             pendingExternalVelocityChange = Vector3.zero;
             localTick++;
-            return ApplyAuthoritativeVelocityChange(SanitizeInput(input));
+            input = ApplyAuthoritativeVelocityChange(SanitizeInput(input));
+            SampleSupport(ref input);
+            return input;
         }
 
         private CharacterMoveInput SanitizeInput(CharacterMoveInput input)
@@ -508,7 +517,15 @@ namespace UnscriptedEngine
             isFlying = input.IsFlying;
             if (isFlying) groundSupport = null;
             if (!isFlying && input.SupportDisplacement.sqrMagnitude > 0f)
-                characterController.Move(input.SupportDisplacement);
+            {
+                if (input.AttachedToSupport)
+                {
+                    // Rebase before the controller sweeps its own movement. Re-enable it to clear
+                    // PhysX's cached ride contact so it cannot apply a second platform displacement.
+                    SetControllerPosition(transform.position + input.SupportDisplacement);
+                }
+                else characterController.Move(input.SupportDisplacement);
+            }
 
             if (isFlying)
             {
@@ -553,6 +570,7 @@ namespace UnscriptedEngine
 
             velocity += input.ExternalVelocityChange;
             contactedSupport = null;
+            contactedSupportBody = null;
             collectingGround = true;
             collectingCollisionLoss = reduceSpeedOnCollision;
             CollisionFlags collisionFlags;
@@ -569,10 +587,13 @@ namespace UnscriptedEngine
             velocity.z *= collisionRetention;
             isGrounded = (collisionFlags & CollisionFlags.Below) != 0;
             groundSupport = isGrounded && !input.JumpPressed ? contactedSupport : null;
+            groundSupportBody = groundSupport != null ? contactedSupportBody : null;
             if (groundSupport != null)
             {
                 supportWorldPoint = transform.position;
-                supportLocalPoint = groundSupport.InverseTransformPoint(supportWorldPoint);
+                supportLocalPoint = groundSupportBody != null
+                    ? Quaternion.Inverse(groundSupportBody.rotation) * (supportWorldPoint - groundSupportBody.position)
+                    : groundSupport.InverseTransformPoint(supportWorldPoint);
             }
 
             if (isGrounded && velocity.y < 0f)
@@ -581,11 +602,56 @@ namespace UnscriptedEngine
             }
         }
 
+        internal void TryAttachMovementFrame(Gameplay.MovementAttachmentZone zone)
+        {
+            if (!IsSpawned || (!IsServer && !IsOwner) || isFlying || movementAttachment != null ||
+                characterController == null || !zone.Allows(characterController)) return;
+
+            Pose pose = zone.GetPhysicsPose();
+            if (!zone.Contains(GetAttachmentPoint(SimulationPosition), pose)) return;
+            movementAttachment = zone;
+            movementFramePose = pose;
+        }
+
+        private void SampleSupport(ref CharacterMoveInput input)
+        {
+            input.AttachedToSupport = false;
+            if (movementAttachment != null)
+            {
+                Vector3 position = SimulationPosition;
+                // Check the last simulation pose in the frame it was computed in. A fast deck can move
+                // beyond the old world position between ticks and cause a transient trigger exit.
+                if (!input.IsFlying && movementAttachment.Allows(characterController) &&
+                    movementAttachment.Contains(GetAttachmentPoint(position), movementFramePose))
+                {
+                    Vector3 localPoint = Quaternion.Inverse(movementFramePose.rotation) * (position - movementFramePose.position);
+                    movementFramePose = movementAttachment.GetPhysicsPose();
+                    input.SupportDisplacement = movementFramePose.position + movementFramePose.rotation * localPoint - position;
+                    input.AttachedToSupport = true;
+                    return;
+                }
+                movementAttachment = null;
+            }
+            input.SupportDisplacement = GetSupportDisplacement();
+        }
+
+        private Vector3 GetAttachmentPoint(Vector3 position)
+        {
+            // Sample the capsule's foot regardless of whether the prefab's pivot is at its center or base.
+            Vector3 localFoot = characterController.center - Vector3.up *
+                (characterController.height * 0.5f - characterController.skinWidth);
+            return position + transform.TransformVector(localFoot);
+        }
+
         private Vector3 GetSupportDisplacement()
         {
             if (!followMovingGround || groundSupport == null || !groundSupport.gameObject.activeInHierarchy || isFlying)
                 return Vector3.zero;
-            Vector3 delta = groundSupport.TransformPoint(supportLocalPoint) - supportWorldPoint;
+            // An interpolated kinematic deck renders between physics poses. Carry uses the completed pose.
+            Vector3 worldPoint = groundSupportBody != null
+                ? groundSupportBody.position + groundSupportBody.rotation * supportLocalPoint
+                : groundSupport.TransformPoint(supportLocalPoint);
+            Vector3 delta = worldPoint - supportWorldPoint;
             // Teleporting supports must not drag the character across the level.
             return delta.sqrMagnitude <= maximumGroundCarryPerStep * maximumGroundCarryPerStep ? delta : Vector3.zero;
         }
@@ -595,7 +661,12 @@ namespace UnscriptedEngine
             UnscriptedEngine.Gameplay.ColliderZone.ForwardControllerHit(hit);
             if (collectingGround && hit.normal.y >= Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)
                 && !hit.transform.IsChildOf(transform))
+            {
                 contactedSupport = hit.collider.transform;
+                Rigidbody body = hit.collider.attachedRigidbody;
+                contactedSupportBody = body != null && body.isKinematic && body.interpolation != RigidbodyInterpolation.None
+                    ? body : null;
+            }
             if (!collectingCollisionLoss || hit.normal.y >=
                 Mathf.Cos(characterController.slopeLimit * Mathf.Deg2Rad)) return;
 
@@ -665,7 +736,7 @@ namespace UnscriptedEngine
             // or reconciliation replay, which must preserve current local look.
             transform.rotation = Quaternion.Euler(0f, input.BodyYaw, 0f);
             // Derive carry on the server; client supplied displacement is never authoritative.
-            input.SupportDisplacement = GetSupportDisplacement();
+            SampleSupport(ref input);
             SimulateMove(input);
             lastProcessedServerTick = input.Tick;
             authoritativeState.Value = CaptureState(input.Tick);
@@ -790,6 +861,15 @@ namespace UnscriptedEngine
 
         private void ApplyState(CharacterMoveState state)
         {
+            SetControllerPosition(state.Position);
+            velocity = state.Velocity;
+            isGrounded = state.IsGrounded;
+            isFlying = state.IsFlying;
+            ResetFixedPositionSamples(state.Position);
+        }
+
+        private void SetControllerPosition(Vector3 position)
+        {
             bool controllerWasEnabled = characterController != null && characterController.enabled;
 
             if (controllerWasEnabled)
@@ -797,11 +877,7 @@ namespace UnscriptedEngine
                 characterController.enabled = false;
             }
 
-            transform.position = state.Position;
-            velocity = state.Velocity;
-            isGrounded = state.IsGrounded;
-            isFlying = state.IsFlying;
-            ResetFixedPositionSamples(state.Position);
+            transform.position = position;
 
             if (controllerWasEnabled)
             {
@@ -821,6 +897,7 @@ namespace UnscriptedEngine
         private void ResetPredictionState()
         {
             groundSupport = null;
+            movementAttachment = null;
             localTick = 0;
             lastProcessedServerTick = -1;
             lastReceivedServerTick = -1;
@@ -946,8 +1023,20 @@ namespace UnscriptedEngine
 
             float interpolationAlpha = GetOwnerInterpolationAlpha();
             ownerCorrectionOffset *= Mathf.Exp(-ownerCorrectionSmoothingSpeed * Time.deltaTime);
-            transform.position = Vector3.Lerp(previousFixedPosition, currentFixedPosition, interpolationAlpha)
-                + ownerCorrectionOffset;
+            Vector3 renderPosition;
+            if (hasFixedFrameSample && movementAttachment != null && movementAttachment.Allows(characterController))
+            {
+                // Both samples are in the latest completed physics frame. Render them against the
+                // deck's interpolated pose so an idle rider stays visually local at any deck speed.
+                Vector3 framePosition = Vector3.Lerp(previousFixedPosition + fixedFrameDisplacement,
+                    currentFixedPosition, interpolationAlpha);
+                renderPosition = movementAttachment.ToRenderPosition(framePosition, movementFramePose);
+            }
+            else
+            {
+                renderPosition = Vector3.Lerp(previousFixedPosition, currentFixedPosition, interpolationAlpha);
+            }
+            transform.position = renderPosition + ownerCorrectionOffset;
             hasInterpolatedTransform = true;
         }
 
@@ -962,15 +1051,18 @@ namespace UnscriptedEngine
             hasInterpolatedTransform = false;
         }
 
-        private void StoreFixedPositionSample(Vector3 previousPosition, Vector3 newPosition)
+        private void StoreFixedPositionSample(Vector3 previousPosition, Vector3 newPosition, CharacterMoveInput input)
         {
+            Vector3 frameDisplacement = input.AttachedToSupport ? input.SupportDisplacement : Vector3.zero;
             float snapDistanceSqr = ownerInterpolationSnapDistance * ownerInterpolationSnapDistance;
             bool shouldSnap = ownerInterpolationSnapDistance <= 0f
                 || hasFixedPositionSamples
-                && (newPosition - previousPosition).sqrMagnitude > snapDistanceSqr;
+                && (newPosition - previousPosition - frameDisplacement).sqrMagnitude > snapDistanceSqr;
 
             previousFixedPosition = shouldSnap ? newPosition : previousPosition;
             currentFixedPosition = newPosition;
+            fixedFrameDisplacement = shouldSnap ? Vector3.zero : frameDisplacement;
+            hasFixedFrameSample = input.AttachedToSupport;
             hasFixedPositionSamples = true;
             hasInterpolatedTransform = false;
         }
@@ -980,6 +1072,7 @@ namespace UnscriptedEngine
             ownerCorrectionOffset = Vector3.zero;
             previousFixedPosition = position;
             currentFixedPosition = position;
+            hasFixedFrameSample = false;
             hasFixedPositionSamples = true;
             hasInterpolatedTransform = false;
         }
