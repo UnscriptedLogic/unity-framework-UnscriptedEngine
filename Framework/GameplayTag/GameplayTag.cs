@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Framework.GameplayTag
 {
-    [CreateAssetMenu(fileName = "GameplayTag", menuName = "Unscripted Engine/Gameplay Tag")]
+    [CreateAssetMenu(fileName = "GameplayTag", menuName = "UnscriptedEngine/Gameplay Tags/Tag")]
     public sealed class GameplayTag : ScriptableObject
     {
         [SerializeField] private string path;

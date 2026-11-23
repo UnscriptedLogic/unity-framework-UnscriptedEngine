@@ -97,7 +97,7 @@ to distinguish them. **None** clears the reference; the original object field st
 supports drag-and-drop and pinging the selected asset. Lists and multi-object editing
 use the same picker, with normal serialized Undo and prefab overrides.
 
-Create tags using **Assets > Create > Unscripted Engine > Gameplay Tag**, then set
+Create tags using **Assets > Create > UnscriptedEngine > Gameplay Tags > Tag**, then set
 their **Path**. Categories are derived from names and do not require parent assets.
 Runtime child matching still uses the tag's explicit **Parent** reference; dotted
 names alone do not change matching behavior. The picker does not rename existing tags.

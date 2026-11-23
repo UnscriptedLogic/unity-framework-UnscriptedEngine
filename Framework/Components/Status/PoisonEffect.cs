@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine.Gameplay
 {
-    [CreateAssetMenu(fileName = "Poison", menuName = "Unscripted Engine/Gameplay/Poison Effect")]
+    [CreateAssetMenu(fileName = "Poison", menuName = "UnscriptedEngine/Status Effects/Poison Effect")]
     public sealed class PoisonEffect : StatusEffectDefinition
     {
         [SerializeField]

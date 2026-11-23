@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Framework.TickSystem
 {
-    [CreateAssetMenu(fileName = "TickerData", menuName = "Unscripted Engine/Tick System/Ticker Data")]
+    [CreateAssetMenu(fileName = "TickerData", menuName = "UnscriptedEngine/Tick System/Ticker Data")]
     public class TickerDataSO : ScriptableObject
     {
         private const float MinTickRate = 0.0001f;

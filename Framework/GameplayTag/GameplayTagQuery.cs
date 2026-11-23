@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Framework.GameplayTag
 {
-    [CreateAssetMenu(fileName = "GameplayTagQuery", menuName = "Unscripted Engine/Gameplay Tag Query")]
+    [CreateAssetMenu(fileName = "GameplayTagQuery", menuName = "UnscriptedEngine/Gameplay Tags/Query")]
     public sealed class GameplayTagQuery : ScriptableObject
     {
         [SerializeField] private GameplayTag[] requiredTags;

@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Framework.GameplayTag
 {
-    [CreateAssetMenu(fileName = "GameplayTagDatabase", menuName = "Unscripted Engine/Gameplay Tag Database")]
+    [CreateAssetMenu(fileName = "GameplayTagDatabase", menuName = "UnscriptedEngine/Gameplay Tags/Database")]
     public sealed class GameplayTagDatabase : ScriptableObject
     {
         [SerializeField] private List<GameplayTag> tags = new();

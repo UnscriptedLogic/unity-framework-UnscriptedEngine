@@ -201,7 +201,7 @@ API migration:
 
 ### Theme widgets
 
-Create **Unscripted Engine > Settings > UI Theme** and assign it to SettingsUI or GeneratedSettingsPanel. Theme assets remain useful because they reference visual prefabs; settings themselves no longer need assets.
+Create **Assets > Create > UnscriptedEngine > UI > Settings Theme** and assign it to SettingsUI or GeneratedSettingsPanel. Theme assets remain useful because they reference visual prefabs; settings themselves no longer need assets.
 
 Mapping priority:
 1. Exact Setting Id.

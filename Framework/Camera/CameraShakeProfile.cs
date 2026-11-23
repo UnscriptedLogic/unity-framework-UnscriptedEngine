@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace UnscriptedEngine
 {
-    [CreateAssetMenu(menuName = "Unscripted Engine/Camera/Item Shake Profile")]
+    [CreateAssetMenu(menuName = "UnscriptedEngine/Camera Shake/Item Shake Profile")]
     public sealed class CameraShakeProfile : ScriptableObject
     {
         [SerializeField, Min(0.01f)] private float duration = 0.14f;

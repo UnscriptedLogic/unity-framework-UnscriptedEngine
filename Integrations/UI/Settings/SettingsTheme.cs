@@ -7,7 +7,7 @@ namespace UnscriptedEngine.UI.Settings
 {
     public enum SettingWidgetKind { Boolean, Float, Integer, Text, Choice, Custom, Vector2, Vector3, Vector4, Quaternion, Color }
 
-    [CreateAssetMenu(menuName = "Unscripted Engine/Settings/UI Theme")]
+    [CreateAssetMenu(menuName = "UnscriptedEngine/UI/Settings Theme")]
     public sealed class SettingsTheme : ScriptableObject
     {
         [Serializable]
