@@ -185,22 +185,44 @@ namespace UnscriptedEngine
 
         public Vector3 Velocity => velocity;
         private readonly NetworkVariable<bool> movementLocked = new NetworkVariable<bool>(false);
+        private readonly NetworkVariable<bool> positionHeld = new NetworkVariable<bool>(false);
         public bool IsMovementLocked => movementLocked.Value;
+        public bool IsPositionHeld => positionHeld.Value;
+
+        /// <summary>Configure a new pawn before spawning, or hold and release a spawned pawn on the server.</summary>
+        public void SetPositionHeld(bool held)
+        {
+            if (!IsSpawned) positionHeld.Reset(held);
+            else if (IsServer) positionHeld.Value = held;
+        }
+
+        private void OnPositionHoldChanged(bool previous, bool current)
+        {
+            RestoreSimulationPosition();
+            ResetFixedPositionSamples(transform.position);
+            ClearPendingMotion();
+            groundSupport = null;
+            groundSupportBody = null;
+            movementAttachment = null;
+            isFlying = false;
+        }
 
         /// <summary>Server-authoritative input lock, enforced during simulation and replay.</summary>
         public void SetMovementLocked(bool locked)
         {
             if (!IsServer || !IsSpawned) return;
             movementLocked.Value = locked;
-            if (locked)
-            {
-                pendingMoveInput = Vector2.zero;
-                pendingVerticalMoveInput = 0f;
-                jumpQueued = false;
-                velocity = Vector3.zero;
-                pendingExternalVelocityChange = Vector3.zero;
-                pendingAuthoritativeVelocityChange = Vector3.zero;
-            }
+            if (locked) ClearPendingMotion();
+        }
+
+        private void ClearPendingMotion()
+        {
+            pendingMoveInput = Vector2.zero;
+            pendingVerticalMoveInput = 0f;
+            jumpQueued = false;
+            velocity = Vector3.zero;
+            pendingExternalVelocityChange = Vector3.zero;
+            pendingAuthoritativeVelocityChange = Vector3.zero;
         }
 
         public Vector3 SimulationPosition => hasInterpolatedTransform ? currentFixedPosition : transform.position;
@@ -359,6 +381,7 @@ namespace UnscriptedEngine
             base.OnSpawned();
             ResetPredictionState();
             authoritativeState.OnValueChanged += HandleAuthoritativeStateChanged;
+            positionHeld.OnValueChanged += OnPositionHoldChanged;
 
             if (IsServer)
             {
@@ -373,6 +396,7 @@ namespace UnscriptedEngine
         protected override void OnDespawned()
         {
             authoritativeState.OnValueChanged -= HandleAuthoritativeStateChanged;
+            positionHeld.OnValueChanged -= OnPositionHoldChanged;
             base.OnDespawned();
         }
 
@@ -385,7 +409,7 @@ namespace UnscriptedEngine
 
         protected override void FixedTick(float fixedDeltaTime)
         {
-            if (!IsSpawned)
+            if (!IsSpawned || IsPositionHeld)
             {
                 return;
             }
@@ -422,7 +446,7 @@ namespace UnscriptedEngine
 
         protected override void Tick(float deltaTime)
         {
-            if (!IsSpawned)
+            if (!IsSpawned || IsPositionHeld)
             {
                 return;
             }
@@ -502,7 +526,7 @@ namespace UnscriptedEngine
         private void SimulateMove(CharacterMoveInput input)
         {
             collisionRetention = 1f;
-            if (characterController == null || !characterController.enabled)
+            if (IsPositionHeld || characterController == null || !characterController.enabled)
             {
                 return;
             }
@@ -604,7 +628,7 @@ namespace UnscriptedEngine
 
         internal void TryAttachMovementFrame(Gameplay.MovementAttachmentZone zone)
         {
-            if (!IsSpawned || (!IsServer && !IsOwner) || isFlying || movementAttachment != null ||
+            if (!IsSpawned || IsPositionHeld || (!IsServer && !IsOwner) || isFlying || movementAttachment != null ||
                 characterController == null || !zone.Allows(characterController)) return;
 
             Pose pose = zone.GetPhysicsPose();
@@ -722,6 +746,7 @@ namespace UnscriptedEngine
         [ServerRpc]
         private void SubmitMoveServerRpc(CharacterMoveInput input)
         {
+            if (IsPositionHeld) return;
             input = SanitizeInput(input);
 
             if (input.Tick <= lastProcessedServerTick)
