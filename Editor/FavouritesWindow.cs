@@ -60,10 +60,7 @@ namespace UnscriptedEngine.Editor
 
         private static bool IsSupported(Object asset)
         {
-            if (asset == null || !EditorUtility.IsPersistent(asset) || !AssetDatabase.IsMainAsset(asset)) return false;
-            string path = AssetDatabase.GetAssetPath(asset);
-            return AssetDatabase.IsValidFolder(path)
-                || (asset is GameObject && Path.GetExtension(path).Equals(".prefab", System.StringComparison.OrdinalIgnoreCase));
+            return asset != null && EditorUtility.IsPersistent(asset) && AssetDatabase.IsMainAsset(asset);
         }
 
         private void AddAssets(IEnumerable<Object> assets)
@@ -94,10 +91,10 @@ namespace UnscriptedEngine.Editor
             using (new EditorGUILayout.HorizontalScope(EditorStyles.toolbar))
             {
                 search = GUILayout.TextField(search, EditorStyles.toolbarSearchField);
-                if (GUILayout.Button(new GUIContent("Add Selected", "Add selected Project folders and prefab assets."), EditorStyles.toolbarButton))
+                if (GUILayout.Button(new GUIContent("Add Selected", "Add selected files and folders from the Project window."), EditorStyles.toolbarButton))
                     AddAssets(Selection.objects);
             }
-            EditorGUILayout.HelpBox("Drop folders or prefabs anywhere here. Click to find in Project; double-click a prefab to open. Drag entries into Scene or Inspector. Saved per project in UserSettings.", MessageType.None);
+            EditorGUILayout.HelpBox("Drop files or folders from the Project window here. Click to find an entry in Project. Double-click a prefab to open it. Drag entries into compatible fields or the Scene view. Saved per project in UserSettings.", MessageType.None);
 
             string removeGuid = null;
             scroll = EditorGUILayout.BeginScrollView(scroll);
@@ -114,7 +111,7 @@ namespace UnscriptedEngine.Editor
                         removeGuid = entry.Guid;
                 }
             }
-            if (entries.Count == 0) EditorGUILayout.LabelField("No favourites yet. Drag in a folder or prefab.", EditorStyles.wordWrappedLabel);
+            if (entries.Count == 0) EditorGUILayout.LabelField("No favourites yet. Drag in a Project file or folder.", EditorStyles.wordWrappedLabel);
             EditorGUILayout.EndScrollView();
             if (removeGuid != null)
             {

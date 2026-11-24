@@ -15,6 +15,8 @@ namespace Framework.Components
     public sealed class ProceduralTree : MonoBehaviour
     {
         private const int MaximumBlockCount = 10000;
+        private const float TrunkForkLengthFraction = 0.2f;
+        private const float TrunkForkAngle = 25f;
 
         /// <summary>Tree geometry for one generated instance. Appearance and collider settings belong to the prefab.</summary>
         public struct ShapeSettings
@@ -59,11 +61,16 @@ namespace Framework.Components
         [Tooltip("Progressively bends the trunk toward world-down. Zero adds no slump; one points the tip downward.")]
         [Range(0f, 1f)]
         [SerializeField] private float slump;
+        [Tooltip("Replace the final fifth of the trunk with two fork tips. Both tips receive leaf clusters using the Leaves settings.")]
+        [SerializeField] private bool splitTrunkTop;
 
         [Header("Branches")]
-        [Tooltip("Number of branches per local unit along the trunk and parent branch paths. Zero disables branches. First child starts one spacing interval from its parent's base.")]
+        [Tooltip("Number of branches per local unit along the trunk and parent branch paths. Zero disables side branches.")]
         [Min(0f)]
         [SerializeField] private float branchesPerTrunkDistance = 0.5f;
+        [Tooltip("Branch-free distance measured along the trunk from its base in local units. Side branch spacing starts above this section.")]
+        [Min(0f)]
+        [SerializeField] private float branchFreeBaseHeight;
         [Tooltip("Total length of each branch along its path, in local units.")]
         [Min(0.001f)]
         [SerializeField] private float branchLength = 4f;
@@ -99,14 +106,18 @@ namespace Framework.Components
         [Header("Leaves")]
         [Tooltip("Shared material for leaf blocks. Leave empty to use Unity's default primitive material. Leaves have no colliders and use the trunk layer.")]
         [SerializeField] private Material leafMaterial;
-        [Tooltip("Number of leaf blocks clustered at each branch end, including both fork tips at every level. Zero disables leaves.")]
+        [Tooltip("Add a leaf cluster at the tip of an unsplit trunk.")]
+        [SerializeField] private bool leavesAtTrunkTip;
+        [Tooltip("Number of leaf blocks per eligible tip, including branch, trunk and fork tips. Zero disables leaves.")]
         [Range(0, 32)]
         [SerializeField] private int leafBlocksPerTip = 3;
-        [Tooltip("Random leaf block width in local units. X is minimum, Y is maximum. Crossing either endpoint moves the other to match.")]
+        [Tooltip("Use the same random size on all three local axes of each leaf block. Each block samples its own size from Leaf Block Width.")]
+        [SerializeField] private bool uniformLeafScale;
+        [Tooltip("Random leaf block width in local units, or size on all axes when Uniform Leaf Scale is enabled. X is minimum, Y is maximum.")]
         [SerializeField] private Vector2 leafBlockWidth = new Vector2(1f, 2f);
-        [Tooltip("Random leaf block height in local units. X is minimum, Y is maximum. Crossing either endpoint moves the other to match.")]
+        [Tooltip("Random leaf block height in local units when Uniform Leaf Scale is off. X is minimum, Y is maximum.")]
         [SerializeField] private Vector2 leafBlockHeight = new Vector2(0.5f, 1f);
-        [Tooltip("Random leaf block depth in local units. X is minimum, Y is maximum. Crossing either endpoint moves the other to match.")]
+        [Tooltip("Random leaf block depth in local units when Uniform Leaf Scale is off. X is minimum, Y is maximum.")]
         [SerializeField] private Vector2 leafBlockDepth = new Vector2(1f, 2f);
 
         [Header("Generation")]
@@ -248,11 +259,17 @@ namespace Framework.Components
             ValidateBranches();
             ValidateLeaves();
             float safeHeight = Mathf.Max(0.001f, height);
-            float requestedCount = Mathf.Ceil(safeHeight / blockLength.x);
+            float forkLength = splitTrunkTop ? safeHeight * TrunkForkLengthFraction : 0f;
+            float stemLength = safeHeight - forkLength;
+            float branchStart = Mathf.Clamp(branchFreeBaseHeight, 0f, stemLength);
+            float requestedCount = Mathf.Ceil(stemLength / blockLength.x);
             double branchCountEstimate = branchLevels == 0 ? 0d :
-                System.Math.Floor((double)safeHeight * branchesPerTrunkDistance);
-            double blocksPerBranch = branchLevels == 0 ? 0d : EstimateBranchBlocks(branchLength, 1);
-            double totalBlockEstimate = requestedCount + branchCountEstimate * blocksPerBranch;
+                System.Math.Floor((double)(stemLength - branchStart) * branchesPerTrunkDistance);
+            double blocksPerBranch = branchCountEstimate == 0d ? 0d : EstimateBranchBlocks(branchLength, 1);
+            double crownBlockCount = splitTrunkTop
+                ? 2d * (Mathf.Ceil(forkLength / branchBlockLength.x) + leafBlocksPerTip)
+                : (leavesAtTrunkTip ? leafBlocksPerTip : 0d);
+            double totalBlockEstimate = requestedCount + branchCountEstimate * blocksPerBranch + crownBlockCount;
             if (double.IsNaN(totalBlockEstimate) || double.IsInfinity(totalBlockEstimate) ||
                 totalBlockEstimate > MaximumBlockCount)
             {
@@ -277,11 +294,13 @@ namespace Framework.Components
             Vector3 position = Vector3.zero;
             Vector3 localDown = transform.InverseTransformDirection(Vector3.down).normalized;
             float distance = 0f;
+            Vector3 tipDirection = Vector3.up;
+            float tipWidth = width.x;
 
-            for (int index = 0; index < blockCount && distance < safeHeight; index++)
+            for (int index = 0; index < blockCount && distance < stemLength; index++)
             {
                 float sampledLength = Mathf.Lerp(blockLength.x, blockLength.y, (float)random.NextDouble());
-                float length = Mathf.Min(sampledLength, safeHeight - distance);
+                float length = Mathf.Min(sampledLength, stemLength - distance);
                 float progress = (distance + length * 0.5f) / safeHeight;
                 float angle = progress * Mathf.Max(0f, curveFrequency) * Mathf.PI * 2f;
                 float bendX = EvaluateBend(angle, phaseX) * curve;
@@ -298,7 +317,7 @@ namespace Framework.Components
 
                 while (branchIndex < branchCount)
                 {
-                    float attachmentDistance = (float)((branchIndex + 1d) / branchesPerTrunkDistance);
+                    float attachmentDistance = (float)(branchStart + (branchIndex + 1d) / branchesPerTrunkDistance);
                     if (attachmentDistance > distance + length)
                     {
                         break;
@@ -316,6 +335,42 @@ namespace Framework.Components
 
                 position += direction * length;
                 distance += length;
+                tipDirection = direction;
+                tipWidth = blockWidth;
+            }
+
+            int crownSeed = unchecked(seed ^ 0x426ED514);
+            if (splitTrunkTop)
+            {
+                GenerateTrunkFork(position, tipDirection, localDown, tipWidth, forkLength, crownSeed);
+            }
+            else if (leavesAtTrunkTip)
+            {
+                GenerateLeaves(generatedRoot, position, tipDirection, stemLength, crownSeed);
+            }
+        }
+
+        private void GenerateTrunkFork(Vector3 junction, Vector3 trunkDirection, Vector3 localDown,
+            float junctionWidth, float forkLength, int crownSeed)
+        {
+            System.Random random = new System.Random(crownSeed);
+            Quaternion trunkRotation = Quaternion.FromToRotation(Vector3.up, trunkDirection);
+            Vector3 forkAxis = trunkRotation * (Quaternion.AngleAxis((float)random.NextDouble() * 360f,
+                Vector3.up) * Vector3.forward);
+            float phaseX = (float)random.NextDouble() * Mathf.PI * 2f;
+            float phaseZ = (float)random.NextDouble() * Mathf.PI * 2f;
+
+            for (int tipIndex = 0; tipIndex < 2; tipIndex++)
+            {
+                Transform tipRoot = new GameObject($"Trunk Fork Tip {tipIndex + 1}").transform;
+                tipRoot.SetParent(generatedRoot, false);
+                tipRoot.gameObject.layer = generatedRoot.gameObject.layer;
+                float angle = tipIndex == 0 ? -TrunkForkAngle : TrunkForkAngle;
+                Quaternion rotation = Quaternion.AngleAxis(angle, forkAxis) * trunkRotation;
+                GenerateBranchSection(tipRoot, junction, rotation, localDown, junctionWidth, random,
+                    phaseX, phaseZ, 0f, forkLength, forkLength, branchLevels, crownSeed,
+                    out Vector3 tip, out Vector3 direction);
+                GenerateLeaves(tipRoot, tip, direction, forkLength, random.Next());
             }
         }
 
@@ -466,6 +521,10 @@ namespace Framework.Components
                     Mathf.Lerp(leafBlockWidth.x, leafBlockWidth.y, (float)random.NextDouble()),
                     Mathf.Lerp(leafBlockHeight.x, leafBlockHeight.y, (float)random.NextDouble()),
                     Mathf.Lerp(leafBlockDepth.x, leafBlockDepth.y, (float)random.NextDouble()));
+                // Keep the same random sequence when switching between leaf scale modes.
+                if (uniformLeafScale)
+                    size = Vector3.one * size.x;
+
                 // One block covers the endpoint. Others overlap it in a small
                 // cluster restricted to the last portion of the branch.
                 Vector3 offset = Vector3.zero;
