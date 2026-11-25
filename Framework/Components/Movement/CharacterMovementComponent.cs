@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -151,6 +152,7 @@ namespace UnscriptedEngine
         [SerializeField, Min(0f)] private float maximumGroundCarryPerStep = 5f;
         private Transform groundSupport;
         private Gameplay.MovementAttachmentZone movementAttachment;
+        private readonly List<Gameplay.MovementAttachmentZone> overlappingMovementFrames = new(2);
         private Pose movementFramePose;
         private Rigidbody groundSupportBody;
         private Vector3 supportLocalPoint, supportWorldPoint;
@@ -204,6 +206,7 @@ namespace UnscriptedEngine
             groundSupport = null;
             groundSupportBody = null;
             movementAttachment = null;
+            overlappingMovementFrames.Clear();
             isFlying = false;
         }
 
@@ -628,14 +631,19 @@ namespace UnscriptedEngine
 
         internal void TryAttachMovementFrame(Gameplay.MovementAttachmentZone zone)
         {
-            if (!IsSpawned || IsPositionHeld || (!IsServer && !IsOwner) || isFlying || movementAttachment != null ||
+            if (!IsSpawned || IsPositionHeld || (!IsServer && !IsOwner) || isFlying ||
                 characterController == null || !zone.Allows(characterController)) return;
+
+            if (!overlappingMovementFrames.Contains(zone)) overlappingMovementFrames.Add(zone);
+            if (movementAttachment != null) return;
 
             Pose pose = zone.GetPhysicsPose();
             if (!zone.Contains(GetAttachmentPoint(SimulationPosition), pose)) return;
             movementAttachment = zone;
             movementFramePose = pose;
         }
+
+        internal void ForgetMovementFrame(Gameplay.MovementAttachmentZone zone) => overlappingMovementFrames.Remove(zone);
 
         private void SampleSupport(ref CharacterMoveInput input)
         {
@@ -645,18 +653,51 @@ namespace UnscriptedEngine
                 Vector3 position = SimulationPosition;
                 // Check the last simulation pose in the frame it was computed in. A fast deck can move
                 // beyond the old world position between ticks and cause a transient trigger exit.
-                if (!input.IsFlying && movementAttachment.Allows(characterController) &&
-                    movementAttachment.Contains(GetAttachmentPoint(position), movementFramePose))
+                if (!input.IsFlying && movementAttachment.Allows(characterController))
                 {
                     Vector3 localPoint = Quaternion.Inverse(movementFramePose.rotation) * (position - movementFramePose.position);
-                    movementFramePose = movementAttachment.GetPhysicsPose();
-                    input.SupportDisplacement = movementFramePose.position + movementFramePose.rotation * localPoint - position;
-                    input.AttachedToSupport = true;
-                    return;
+                    Pose currentPose = movementAttachment.GetPhysicsPose();
+                    Vector3 carriedPosition = currentPose.position + currentPose.rotation * localPoint;
+                    if (movementAttachment.Contains(GetAttachmentPoint(position), movementFramePose))
+                    {
+                        movementFramePose = currentPose;
+                    }
+                    else
+                    {
+                        // The next frame tests the carried foot, so changing decks keeps this tick's movement.
+                        TransferMovementFrame(GetAttachmentPoint(carriedPosition));
+                    }
+                    if (movementAttachment != null)
+                    {
+                        input.SupportDisplacement = carriedPosition - position;
+                        input.AttachedToSupport = true;
+                        return;
+                    }
                 }
                 movementAttachment = null;
             }
             input.SupportDisplacement = GetSupportDisplacement();
+        }
+
+        private void TransferMovementFrame(Vector3 carriedFoot)
+        {
+            Gameplay.MovementAttachmentZone previous = movementAttachment;
+            movementAttachment = null;
+            for (int index = overlappingMovementFrames.Count - 1; index >= 0; index--)
+            {
+                Gameplay.MovementAttachmentZone candidate = overlappingMovementFrames[index];
+                if (candidate == null || !candidate.Allows(characterController))
+                {
+                    overlappingMovementFrames.RemoveAt(index);
+                    continue;
+                }
+                if (candidate == previous) continue;
+                Pose pose = candidate.GetPhysicsPose();
+                if (!candidate.Contains(carriedFoot, pose)) continue;
+                movementAttachment = candidate;
+                movementFramePose = pose;
+                return;
+            }
         }
 
         private Vector3 GetAttachmentPoint(Vector3 position)
@@ -923,6 +964,7 @@ namespace UnscriptedEngine
         {
             groundSupport = null;
             movementAttachment = null;
+            overlappingMovementFrames.Clear();
             localTick = 0;
             lastProcessedServerTick = -1;
             lastReceivedServerTick = -1;

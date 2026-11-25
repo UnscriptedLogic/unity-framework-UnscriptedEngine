@@ -23,12 +23,14 @@ namespace UnscriptedEngine.Gameplay
         {
             zone.Entered.AddListener(OfferAttachment);
             zone.Stayed.AddListener(OfferAttachment);
+            zone.Exited.AddListener(ForgetAttachment);
         }
 
         private void OnDisable()
         {
             zone.Entered.RemoveListener(OfferAttachment);
             zone.Stayed.RemoveListener(OfferAttachment);
+            zone.Exited.RemoveListener(ForgetAttachment);
         }
 
         private void OfferAttachment(Collider contact)
@@ -36,6 +38,13 @@ namespace UnscriptedEngine.Gameplay
             if (contact is CharacterController controller &&
                 controller.TryGetComponent(out CharacterMovementComponent movement))
                 movement.TryAttachMovementFrame(this);
+        }
+
+        private void ForgetAttachment(Collider contact)
+        {
+            if (contact is CharacterController controller && controller != null &&
+                controller.TryGetComponent(out CharacterMovementComponent movement))
+                movement.ForgetMovementFrame(this);
         }
 
         internal bool Allows(CharacterController controller) =>
