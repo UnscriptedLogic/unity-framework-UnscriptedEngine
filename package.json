@@ -11,6 +11,8 @@
     "dependencies": {
         "com.unity.netcode.gameobjects": "2.13.1",
         "com.unity.cinemachine": "3.1.7",
+        "com.unity.inputsystem": "1.7.0",
+        "com.unity.ugui": "1.0.0",
         "com.unity.modules.physics": "1.0.0",
         "com.unity.modules.audio": "1.0.0",
         "com.unity.modules.animation": "1.0.0",

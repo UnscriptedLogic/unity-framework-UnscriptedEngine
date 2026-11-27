@@ -7,6 +7,10 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.EventSystems;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem.UI;
+#endif
 using Object = UnityEngine.Object;
 
 namespace UnscriptedEngine.Editor.Scaffolding
@@ -59,6 +63,26 @@ namespace UnscriptedEngine.Editor.Scaffolding
                 throw new InvalidOperationException("Save and open the target scene before generating its player pair.");
             if (Find<UGameMode>(scene).Length != 1 || Find<NetworkManager>(scene).Length != 1)
                 throw new InvalidOperationException("Target scene must contain exactly one GameMode and one NetworkManager (including inactive objects).");
+        }
+
+        private static void CreateSceneDefaults()
+        {
+            var sun = new GameObject("Sun", typeof(Light)).GetComponent<Light>();
+            sun.type = LightType.Directional;
+            sun.shadows = LightShadows.Soft;
+            sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            RenderSettings.sun = sun;
+
+            var camera = new GameObject("Main Camera", typeof(Camera), typeof(AudioListener));
+            camera.tag = "MainCamera";
+            camera.transform.position = new Vector3(0f, 1f, -10f);
+
+            var events = new GameObject("EventSystem", typeof(EventSystem));
+#if ENABLE_INPUT_SYSTEM
+            events.AddComponent<InputSystemUIInputModule>().AssignDefaultActions();
+#else
+            events.AddComponent<StandaloneInputModule>();
+#endif
         }
 
         private static T[] Find<T>(Scene scene) where T : Component => scene.GetRootGameObjects()
@@ -185,6 +209,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
             try
             {
                 SceneManager.SetActiveScene(scene);
+                CreateSceneDefaults();
                 var mode = CreateObject(plan, "GM", true).GetComponent<UGameMode>();
                 CreateObject(plan, "GI", false);
                 CreateObject(plan, "GS", true);

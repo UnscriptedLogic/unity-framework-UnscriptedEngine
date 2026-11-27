@@ -1,6 +1,6 @@
 {
     "name": "UnscriptedEngine.Editor",
-    "references": ["UnscriptedEngine", "Unity.Netcode.Runtime"],
+    "references": ["UnscriptedEngine", "Unity.Netcode.Runtime", "UnityEngine.UI", "Unity.InputSystem"],
     "includePlatforms": ["Editor"],
     "autoReferenced": true
 }

@@ -91,7 +91,7 @@ namespace UnscriptedEngine.Editor.Scaffolding
         {
             player = (UPlayerDefinition)EditorGUILayout.ObjectField("Player pair (optional)", player, typeof(UPlayerDefinition), false);
             plan.playerDefinitionPath = AssetDatabase.GetAssetPath(player);
-            EditorGUILayout.HelpBox("Creates and opens a new scene after compilation, with a save prompt for current scenes. Includes GameMode, GameInstance, GameState, NetworkManager, and Unity Transport. Start Host/Client through your own UI or code. Scene is not added to build settings.", MessageType.Info);
+            EditorGUILayout.HelpBox("Creates and opens a new scene after compilation, with a save prompt for current scenes. Includes GameMode, GameInstance, GameState, NetworkManager, Unity Transport, Sun, Main Camera, and EventSystem. Start Host/Client through your own UI or code. Scene is not added to build settings.", MessageType.Info);
         }
 
         protected override void ValidateOptions(ScaffoldPlan plan)
